@@ -1,0 +1,431 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USERS & AUTH ====================
+
+enum UserRole {
+  SUPERADMIN  // Správca celého systému, spravuje rezorty a adminov
+  ADMIN       // Správca rezortu, vytvára VK
+  GESTOR      // Spravuje konkrétne VK
+  KOMISIA     // Hodnotí uchádzačov
+  UCHADZAC    // Dočasný účet pre VK
+}
+
+// ==================== MULTI-TENANCY: REZORTY ====================
+
+// Institution (Rezort) - Organizačná jednotka (ministerstvo, úrad)
+model Institution {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  description String?
+
+  active      Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserInstitution[]
+  vks         VyberoveKonanie[]
+
+  @@map("institutions")
+}
+
+// M:N join table pre User <-> Institution
+model UserInstitution {
+  id            String   @id @default(cuid())
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  assignedAt    DateTime @default(now())
+  assignedBy    String?
+
+  @@unique([userId, institutionId])
+  @@map("user_institutions")
+}
+
+// User model - Trvalé účty (Superadmin, Admin, Gestor, Komisia)
+model User {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  email         String?  @unique
+  password      String?
+  name          String
+  surname       String
+  role          UserRole
+  note          String?
+
+  otpSecret     String?
+  otpEnabled    Boolean  @default(false)
+  recoveryCode  String?
+
+  passwordSetToken       String?   @unique
+  passwordSetTokenExpiry DateTime?
+
+  deleted       Boolean  @default(false)
+  deletedAt     DateTime?
+  deletedEmail  String?
+
+  active        Boolean  @default(true)
+  temporaryAccount Boolean @default(false)
+  archivedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
+
+  institutions  UserInstitution[]
+  createdVKs    VyberoveKonanie[]  @relation("CreatedBy")
+  gestorVKs     VyberoveKonanie[]  @relation("GestorVK")
+  candidates    Candidate[]
+  commissionMemberships CommissionMember[]
+  evaluations   Evaluation[]
+  auditLogs     AuditLog[]
+  testResults   TestResult[]
+
+  @@map("users")
+}
+
+// ==================== VÝBEROVÉ KONANIA ====================
+
+model VyberoveKonanie {
+  id                String   @id @default(cuid())
+  identifier        String   @unique
+
+  institutionId     String
+  institution       Institution @relation(fields: [institutionId], references: [id])
+
+  selectionType     String
+  organizationalUnit String
+  serviceField      String
+  position          String
+  serviceType       String
+  date              DateTime
+
+  numberOfPositions Int      @default(1)
+
+  status            VKStatus @default(PRIPRAVA)
+
+  gestorId          String?
+  gestor            User?    @relation("GestorVK", fields: [gestorId], references: [id])
+
+  createdById       String
+  createdBy         User     @relation("CreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  candidates        Candidate[]
+  assignedTests     VKTest[]
+  commission        Commission?
+  evaluationConfig  EvaluationConfig?
+  documents         GeneratedDocument[]
+
+  @@map("vyberove_konania")
+}
+
+enum VKStatus {
+  PRIPRAVA
+  CAKA_NA_TESTY
+  TESTOVANIE
+  HODNOTENIE
+  DOKONCENE
+  ZRUSENE
+}
+
+// ==================== TESTY ====================
+
+model Test {
+  id            String     @id @default(cuid())
+  name          String
+  type          TestTyp
+  description   String?
+
+  questions     Json
+
+  recommendedQuestionCount  Int?
+  recommendedDuration       Int?
+  recommendedScore          Float?
+
+  approved      Boolean    @default(false)
+  approvedAt    DateTime?
+
+  authorId      String?
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  vkAssignments VKTest[]
+  results       TestResult[]
+
+  @@map("tests")
+}
+
+enum TestTyp {
+  ODBORNY
+  VSEOBECNY
+  STATNY_JAZYK
+  CUDZI_JAZYK
+  IT_ZRUCNOSTI
+  SCHOPNOSTI_VLASTNOSTI
+}
+
+model VKTest {
+  id            String   @id @default(cuid())
+
+  vkId          String
+  vk            VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
+
+  testId        String
+  test          Test     @relation(fields: [testId], references: [id])
+
+  level         Int
+
+  questionCount Int
+  durationMinutes Int
+  scorePerQuestion Float
+  minScore      Float
+
+  createdAt     DateTime @default(now())
+
+  @@unique([vkId, testId])
+  @@unique([vkId, level])
+  @@map("vk_tests")
+}
+
+// ==================== KANDIDÁTI ====================
+
+model Candidate {
+  id                String   @id @default(cuid())
+
+  vkId              String
+  vk                VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
+
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+
+  cisIdentifier     String
+
+  email             String?
+
+  isArchived        Boolean  @default(false)
+
+  deleted           Boolean  @default(false)
+  deletedAt         DateTime?
+  deletedEmail      String?
+
+  registeredAt      DateTime @default(now())
+
+  testResults       TestResult[]
+  documents         Document[]
+  evaluations       Evaluation[]
+
+  @@unique([vkId, cisIdentifier])
+  @@map("candidates")
+}
+
+// ==================== VÝSLEDKY TESTOV ====================
+
+model TestResult {
+  id            String   @id @default(cuid())
+
+  candidateId   String
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  testId        String
+  test          Test     @relation(fields: [testId], references: [id])
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  answers       Json
+  score         Float
+  maxScore      Float
+  successRate   Float
+  passed        Boolean
+
+  startedAt     DateTime
+  completedAt   DateTime?
+  durationSeconds Int?
+
+  createdAt     DateTime @default(now())
+
+  @@unique([candidateId, testId])
+  @@map("test_results")
+}
+
+// ==================== KOMISIA ====================
+
+model Commission {
+  id            String   @id @default(cuid())
+
+  vkId          String   @unique
+  vk            VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
+
+  chairmanId    String?
+
+  createdAt     DateTime @default(now())
+
+  members       CommissionMember[]
+
+  @@map("commissions")
+}
+
+model CommissionMember {
+  id            String   @id @default(cuid())
+
+  commissionId  String
+  commission    Commission @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  isChairman    Boolean  @default(false)
+
+  createdAt     DateTime @default(now())
+
+  evaluations   Evaluation[]
+
+  @@unique([commissionId, userId])
+  @@map("commission_members")
+}
+
+// ==================== HODNOTENIE ====================
+
+model EvaluationConfig {
+  id            String   @id @default(cuid())
+
+  vkId          String   @unique
+  vk            VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
+
+  evaluatedTraits String[]
+
+  questionBattery Json
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("evaluation_configs")
+}
+
+model Evaluation {
+  id            String   @id @default(cuid())
+
+  candidateId   String
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  memberId      String
+  member        CommissionMember @relation(fields: [memberId], references: [id])
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  evaluation    Json
+
+  totalScore    Float
+  maxScore      Float
+  successRate   Float
+
+  finalized     Boolean  @default(false)
+  finalizedAt   DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([candidateId, memberId])
+  @@map("evaluations")
+}
+
+// ==================== DOKUMENTY ====================
+
+model Document {
+  id            String   @id @default(cuid())
+
+  candidateId   String
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  type          DocTyp
+  name          String
+  path          String
+
+  uploadedAt    DateTime @default(now())
+
+  @@map("documents")
+}
+
+enum DocTyp {
+  CV
+  MOTIVACNY_LIST
+  CERTIFIKAT
+  INE
+}
+
+model GeneratedDocument {
+  id            String   @id @default(cuid())
+
+  vkId          String
+  vk            VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
+
+  type          GenDocTyp
+  path          String
+
+  generatedAt   DateTime @default(now())
+
+  @@map("generated_documents")
+}
+
+enum GenDocTyp {
+  SUMARNY_HAROK
+  ZAVERECNE_HODNOTENIE
+  ZAPISNICA
+}
+
+// ==================== AUDIT LOG (Rozšírený) ====================
+
+model AuditLog {
+  id            String   @id @default(cuid())
+
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action        String
+  entity        String?
+  entityId      String?
+
+  details       Json?
+  previousValue Json?
+  newValue      Json?
+
+  ipAddress     String?
+  userAgent     String?
+  sessionId     String?
+  requestId     String?
+
+  severity      LogSeverity @default(INFO)
+
+  timestamp     DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([sessionId])
+  @@index([timestamp])
+  @@index([severity])
+  @@map("audit_logs")
+}
+
+enum LogSeverity {
+  CRITICAL
+  WARNING
+  INFO
+}

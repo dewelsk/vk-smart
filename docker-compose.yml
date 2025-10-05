@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: vk-smart-app
+    ports:
+      - "5600:5600"  # Next.js aplikácia
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXTAUTH_URL=http://localhost:5600
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+    networks:
+      - vk-network
+    command: npm run dev
+
+networks:
+  vk-network:
+    driver: bridge
+
+volumes:
+  node_modules:

@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  color: #111827;
+  background: #ffffff;
+}
+
+/* Force dark text in inputs */
+input,
+textarea,
+select {
+  color: #111827 !important;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
