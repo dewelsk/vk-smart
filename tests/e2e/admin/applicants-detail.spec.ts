@@ -19,8 +19,9 @@ test.describe('Applicants Detail @admin @applicants', () => {
       return
     }
 
-    const firstRow = rows.first()
-    await firstRow.click()
+    // Click on first applicant name link
+    const firstNameLink = rows.first().locator('[data-testid^="applicant-name-"]')
+    await firstNameLink.click()
 
     // Wait for navigation to detail page
     await page.waitForURL(/\/applicants\/[a-z0-9]+/)
@@ -31,140 +32,85 @@ test.describe('Applicants Detail @admin @applicants', () => {
   })
 
   test('should display applicant detail page', async ({ page }) => {
-    await expect(page.locator('h1')).toBeVisible()
-
-    // Check if we see applicant info sections
-    await expect(page.locator('text=Výberové konanie')).toBeVisible()
-    await expect(page.locator('text=Informácie o uchádzačovi')).toBeVisible()
+    await expect(page.getByTestId('applicant-detail-page')).toBeVisible()
+    await expect(page.getByTestId('applicant-name')).toBeVisible()
+    await expect(page.getByTestId('applicant-email')).toBeVisible()
   })
 
-  test('should display VK information', async ({ page }) => {
-    const vkSection = page.locator('text=Výberové konanie').locator('..')
-    await expect(vkSection).toBeVisible()
-
-    // Should show VK details
-    await expect(page.locator('dt:has-text("Identifikátor")')).toBeVisible()
-    await expect(page.locator('dt:has-text("Pozícia")')).toBeVisible()
-    await expect(page.locator('dt:has-text("Rezort")')).toBeVisible()
+  test('should display tabs', async ({ page }) => {
+    await expect(page.getByTestId('tabs-container')).toBeVisible()
+    await expect(page.getByTestId('overview-tab')).toBeVisible()
+    await expect(page.getByTestId('vk-tab')).toBeVisible()
   })
 
-  test('should display applicant information', async ({ page }) => {
-    const applicantSection = page.locator('text=Informácie o uchádzačovi').locator('..')
-    await expect(applicantSection).toBeVisible()
+  test('should display overview tab by default', async ({ page }) => {
+    // Overview tab should have active class
+    const overviewTab = page.getByTestId('overview-tab')
+    await expect(overviewTab).toHaveClass(/border-blue-500/)
 
-    // Should show registration date, last login, etc.
-    await expect(page.locator('dt:has-text("Registrácia")')).toBeVisible()
-    await expect(page.locator('dt:has-text("Stav účtu")')).toBeVisible()
+    // Overview content should be visible
+    await expect(page.getByTestId('overview-content')).toBeVisible()
   })
 
-  test('should display edit form', async ({ page }) => {
-    await expect(page.locator('text=Upraviť uchádzača')).toBeVisible()
-    await expect(page.locator('input[name="email"]')).toBeVisible()
-    await expect(page.locator('button:has-text("Uložiť zmeny")')).toBeVisible()
+  test('should display status badge', async ({ page }) => {
+    await expect(page.getByTestId('status-badge')).toBeVisible()
   })
 
-  test('should update applicant email', async ({ page }) => {
-    const timestamp = Date.now()
-    const emailInput = page.locator('input[name="email"]')
-
-    await emailInput.clear()
-    await emailInput.fill(`updated.applicant.${timestamp}@test.sk`)
-
-    await page.click('button:has-text("Uložiť zmeny")')
-
-    // Wait for save
-    await page.waitForTimeout(2000)
-
-    // Reload to verify
-    await page.reload()
-    await expect(emailInput).toHaveValue(`updated.applicant.${timestamp}@test.sk`)
+  test('should display basic information in overview tab', async ({ page }) => {
+    await expect(page.getByTestId('overview-content')).toBeVisible()
+    await expect(page.getByTestId('field-name')).toBeVisible()
+    await expect(page.getByTestId('field-surname')).toBeVisible()
+    await expect(page.getByTestId('field-email')).toBeVisible()
+    await expect(page.getByTestId('field-username')).toBeVisible()
+    await expect(page.getByTestId('field-role')).toBeVisible()
+    await expect(page.getByTestId('field-status')).toBeVisible()
   })
 
-  test('should toggle applicant archived status', async ({ page }) => {
-    const archivedCheckbox = page.locator('input[type="checkbox"]#isArchived')
-
-    // Get current state
-    const wasChecked = await archivedCheckbox.isChecked()
-
-    // Toggle
-    await archivedCheckbox.click()
-
-    // Save
-    await page.click('button:has-text("Uložiť zmeny")')
-    await page.waitForTimeout(2000)
-
-    // Reload and verify
-    await page.reload()
-    await expect(archivedCheckbox).toHaveProperty('checked', !wasChecked)
+  test('should display creation and update dates', async ({ page }) => {
+    await expect(page.getByTestId('field-created')).toBeVisible()
+    await expect(page.getByTestId('field-updated')).toBeVisible()
   })
 
-  test('should cancel edit and return to applicants list', async ({ page }) => {
-    await page.click('a:has-text("Zrušiť")')
-    await page.waitForURL('/applicants')
-    await expect(page.locator('h1')).toContainText('Uchádzači')
+  test('should switch to VK tab', async ({ page }) => {
+    const vkTab = page.getByTestId('vk-tab')
+    await vkTab.click()
+
+    // VK tab should be active
+    await expect(vkTab).toHaveClass(/border-blue-500/)
+
+    // VK content should be visible
+    await expect(page.getByTestId('vk-content')).toBeVisible()
   })
 
-  test('should display delete button', async ({ page }) => {
-    await expect(page.locator('button:has-text("Odstrániť")')).toBeVisible()
-  })
+  test('should display VK content or empty message in VK tab', async ({ page }) => {
+    await page.getByTestId('vk-tab').click()
 
-  test('should show confirmation dialog on delete', async ({ page }) => {
-    // Setup dialog listener
-    page.on('dialog', async dialog => {
-      expect(dialog.type()).toBe('confirm')
-      expect(dialog.message()).toContain('odstrániť')
-      await dialog.dismiss()
-    })
+    // Should either see table or empty message
+    const hasTable = await page.getByTestId('vk-table').isVisible().catch(() => false)
+    const hasEmptyMessage = await page.getByTestId('vk-empty-message').isVisible().catch(() => false)
 
-    await page.click('button:has-text("Odstrániť")')
-
-    // Wait for dialog
-    await page.waitForTimeout(500)
+    // One of them should be visible
+    expect(hasTable || hasEmptyMessage).toBeTruthy()
   })
 
   test('should navigate back to applicants list', async ({ page }) => {
-    // Click back button
-    const backButton = page.locator('a[href="/applicants"]').first()
+    const backButton = page.getByTestId('back-button')
+    await expect(backButton).toBeVisible()
     await backButton.click()
 
     await page.waitForURL('/applicants')
-    await expect(page.locator('h1')).toContainText('Uchádzači')
+    await expect(page.getByTestId('applicants-page')).toBeVisible()
   })
 
-  test('should display test results section', async ({ page }) => {
-    const testResultsSection = page.locator('text=Výsledky testov')
-    const sectionVisible = await testResultsSection.isVisible().catch(() => false)
-
-    if (sectionVisible) {
-      await expect(testResultsSection).toBeVisible()
-    }
-  })
-
-  test('should display evaluations section', async ({ page }) => {
-    const evaluationsSection = page.locator('text=Hodnotenia')
-    const sectionVisible = await evaluationsSection.isVisible().catch(() => false)
-
-    if (sectionVisible) {
-      await expect(evaluationsSection).toBeVisible()
-    }
-  })
-
-  test('should have link to VK detail', async ({ page }) => {
-    // VK identifier should be a link
-    const vkLink = page.locator('a[href^="/vk/"]').first()
-    const linkVisible = await vkLink.isVisible().catch(() => false)
-
-    if (linkVisible) {
-      await expect(vkLink).toBeVisible()
-      await expect(vkLink).toHaveAttribute('href', /\/vk\/[a-z0-9]+/)
-    }
-  })
-
-  test('should display applicant status badges', async ({ page }) => {
-    // Active/Inactive badge
-    const statusBadges = page.locator('.inline-flex.items-center.px-2')
-    const badgeCount = await statusBadges.count()
-
-    expect(badgeCount).toBeGreaterThan(0)
+  test('should have all field sections visible', async ({ page }) => {
+    // All fields should be present
+    await expect(page.getByTestId('field-name')).toBeVisible()
+    await expect(page.getByTestId('field-surname')).toBeVisible()
+    await expect(page.getByTestId('field-email')).toBeVisible()
+    await expect(page.getByTestId('field-username')).toBeVisible()
+    await expect(page.getByTestId('field-role')).toBeVisible()
+    await expect(page.getByTestId('field-status')).toBeVisible()
+    await expect(page.getByTestId('field-created')).toBeVisible()
+    await expect(page.getByTestId('field-updated')).toBeVisible()
   })
 })
