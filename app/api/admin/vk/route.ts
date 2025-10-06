@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { PrismaClient, VKStatus } from '@prisma/client'
+import { VKStatus  } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { getReadinessIndicator } from '@/lib/vk-validation'
 
-const prisma = new PrismaClient()
 
 // GET /api/admin/vk - List VK with filters
 export async function GET(request: NextRequest) {

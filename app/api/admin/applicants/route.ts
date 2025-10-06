@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 
-const prisma = new PrismaClient()
 
 // GET /api/admin/applicants - List applicants with filters
 export async function GET(request: NextRequest) {
@@ -87,74 +86,136 @@ export async function GET(request: NextRequest) {
       orderBy.registeredAt = sortOrder
     }
 
-    // Fetch applicants
-    const [applicants, total] = await Promise.all([
-      prisma.candidate.findMany({
-        where,
-        orderBy,
+    // Build user where clause
+    const userWhere: any = {
+      role: 'UCHADZAC',
+      active: true,
+      deleted: false,
+    }
+
+    // Search filter for users
+    if (search) {
+      userWhere.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { surname: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { username: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    // Build candidate where clause for filtering
+    const candidateWhere: any = {
+      deleted: false,
+    }
+
+    // Archived filter
+    if (archived === 'true') {
+      candidateWhere.isArchived = true
+    } else if (archived === 'false') {
+      candidateWhere.isArchived = false
+    }
+
+    // VK filter
+    if (vkId) {
+      candidateWhere.vkId = vkId
+      // If filtering by VK, only show users who have candidates in that VK
+      userWhere.candidates = {
+        some: candidateWhere
+      }
+    }
+
+    // Institution filter
+    if (institutionId) {
+      candidateWhere.vk = {
+        institutionId,
+      }
+      userWhere.candidates = {
+        some: candidateWhere
+      }
+    }
+
+    // RBAC: Admin/Gestor/Komisia see only applicants from their institutions
+    if (session.user.role !== 'SUPERADMIN') {
+      const userInstitutionIds = session.user.institutions.map((i) => i.id)
+      candidateWhere.vk = {
+        ...candidateWhere.vk,
+        institutionId: {
+          in: userInstitutionIds,
+        },
+      }
+      // If user has candidate filters, apply institution filter
+      if (vkId || institutionId || archived !== 'all') {
+        userWhere.candidates = {
+          some: candidateWhere
+        }
+      }
+    }
+
+    // Fetch all UCHADZAC users with their candidates
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where: userWhere,
+        orderBy: [
+          { surname: sortOrder as any },
+          { name: sortOrder as any },
+        ],
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              surname: true,
-              email: true,
-            },
-          },
-          vk: {
-            select: {
-              id: true,
-              identifier: true,
-              position: true,
-              status: true,
-              institution: {
+          candidates: {
+            where: candidateWhere,
+            include: {
+              vk: {
                 select: {
                   id: true,
-                  code: true,
-                  name: true,
+                  identifier: true,
+                  position: true,
+                  status: true,
+                  institution: {
+                    select: {
+                      id: true,
+                      code: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+              testResults: {
+                select: {
+                  id: true,
+                },
+              },
+              evaluations: {
+                select: {
+                  id: true,
                 },
               },
             },
           },
-          testResults: {
-            select: {
-              id: true,
-            },
-          },
-          evaluations: {
-            select: {
-              id: true,
-            },
-          },
         },
       }),
-      prisma.candidate.count({ where }),
+      prisma.user.count({ where: userWhere }),
     ])
 
     // Format response
-    const formattedApplicants = applicants.map((applicant) => ({
-      id: applicant.id,
-      cisIdentifier: applicant.cisIdentifier,
-      email: applicant.email,
-      isArchived: applicant.isArchived,
-      registeredAt: applicant.registeredAt,
-      user: {
-        id: applicant.user.id,
-        name: applicant.user.name,
-        surname: applicant.user.surname,
-        email: applicant.user.email,
-      },
-      vk: {
-        id: applicant.vk.id,
-        identifier: applicant.vk.identifier,
-        position: applicant.vk.position,
-        status: applicant.vk.status,
-        institution: applicant.vk.institution,
-      },
-      testResultsCount: applicant.testResults.length,
-      evaluationsCount: applicant.evaluations.length,
+    const formattedApplicants = users.map((user) => ({
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      surname: user.surname,
+      email: user.email,
+      active: user.active,
+      createdAt: user.createdAt,
+      candidates: user.candidates.map((candidate) => ({
+        id: candidate.id,
+        cisIdentifier: candidate.cisIdentifier,
+        email: candidate.email,
+        isArchived: candidate.isArchived,
+        registeredAt: candidate.registeredAt,
+        vk: candidate.vk,
+        testResultsCount: candidate.testResults.length,
+        evaluationsCount: candidate.evaluations.length,
+      })),
     }))
 
     return NextResponse.json({
