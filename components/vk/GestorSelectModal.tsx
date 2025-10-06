@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 
 type User = {
   id: string
@@ -24,14 +24,32 @@ export function GestorSelectModal({
   onClose,
   onSuccess
 }: GestorSelectModalProps) {
-  const [users, setUsers] = useState<User[]>([])
+  const [allUsers, setAllUsers] = useState<User[]>([])
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [search, setSearch] = useState('')
   const [selectedUserId, setSelectedUserId] = useState<string | null>(currentGestorId)
 
   useEffect(() => {
     fetchGestorUsers()
   }, [])
+
+  useEffect(() => {
+    if (search.trim() === '') {
+      setFilteredUsers(allUsers)
+    } else {
+      const searchLower = search.toLowerCase()
+      setFilteredUsers(
+        allUsers.filter(
+          user =>
+            user.name.toLowerCase().includes(searchLower) ||
+            user.surname.toLowerCase().includes(searchLower) ||
+            user.email?.toLowerCase().includes(searchLower)
+        )
+      )
+    }
+  }, [search, allUsers])
 
   async function fetchGestorUsers() {
     try {
@@ -39,7 +57,8 @@ export function GestorSelectModal({
       const data = await res.json()
 
       if (data.users) {
-        setUsers(data.users)
+        setAllUsers(data.users)
+        setFilteredUsers(data.users)
       }
     } catch (error) {
       console.error('Failed to fetch users:', error)
@@ -95,18 +114,36 @@ export function GestorSelectModal({
           </button>
         </div>
 
+        {/* Search */}
+        <div className="px-6 pt-6 border-b border-gray-200 pb-4">
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Hľadať podľa mena alebo emailu..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="text-center py-12 text-gray-500">
               Načítavam používateľov...
             </div>
-          ) : users.length === 0 ? (
+          ) : filteredUsers.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-500">Žiadni dostupní používatelia s rolou GESTOR</p>
-              <p className="text-sm text-gray-400 mt-2">
-                Vytvorte nového používateľa s rolou GESTOR.
+              <p className="text-gray-500">
+                {search ? 'Žiadni používatelia nenájdení' : 'Žiadni dostupní používatelia s rolou GESTOR'}
               </p>
+              {!search && (
+                <p className="text-sm text-gray-400 mt-2">
+                  Vytvorte nového používateľa s rolou GESTOR.
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -115,7 +152,7 @@ export function GestorSelectModal({
                   Vyberte gestora
                 </label>
                 <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-96 overflow-y-auto">
-                  {users.map((user) => (
+                  {filteredUsers.map((user) => (
                     <label
                       key={user.id}
                       className={`flex items-center p-3 hover:bg-gray-50 cursor-pointer ${

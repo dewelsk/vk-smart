@@ -30,6 +30,7 @@ interface DataTableProps<TData, TValue> {
   pageIndex?: number
   onPaginationChange?: (pagination: PaginationState) => void
   pageSizeOptions?: number[]
+  onRowClick?: (row: TData) => void
 }
 
 export function DataTable<TData, TValue>({
@@ -43,6 +44,7 @@ export function DataTable<TData, TValue>({
   pageIndex = 0,
   onPaginationChange,
   pageSizeOptions = [10, 20, 50, 100],
+  onRowClick,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [paginationState, setPaginationState] = useState<PaginationState>({
@@ -142,7 +144,8 @@ export function DataTable<TData, TValue>({
             table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="hover:bg-gray-50 transition-colors"
+                className={`hover:bg-gray-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                onClick={() => onRowClick?.(row.original)}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td

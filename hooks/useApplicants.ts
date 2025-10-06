@@ -2,29 +2,32 @@ import { useQuery } from '@tanstack/react-query'
 
 export type Applicant = {
   id: string
-  cisIdentifier: string
+  username: string
+  name: string
+  surname: string
   email: string | null
-  isArchived: boolean
-  registeredAt: string
-  user: {
+  active: boolean
+  createdAt: string
+  candidates: Array<{
     id: string
-    name: string
-    surname: string
+    cisIdentifier: string
     email: string | null
-  }
-  vk: {
-    id: string
-    identifier: string
-    position: string
-    status: string
-    institution: {
+    isArchived: boolean
+    registeredAt: string
+    vk: {
       id: string
-      code: string
-      name: string
+      identifier: string
+      position: string
+      status: string
+      institution: {
+        id: string
+        code: string
+        name: string
+      }
     }
-  }
-  testResultsCount: number
-  evaluationsCount: number
+    testResultsCount: number
+    evaluationsCount: number
+  }>
 }
 
 type UseApplicantsParams = {
