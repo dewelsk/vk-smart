@@ -243,14 +243,20 @@ Role: ADMIN
 7. Systém vygeneruje dokumentáciu (PDF)
 ```
 
-### Testové levely
+### Testová organizácia
 
-1. **Odborný test** - Odborné vedomosti
-2. **Všeobecný test** - Všeobecné vedomosti
-3. **Štátny jazyk** - Slovenčina
-4. **Cudzí jazyk** - Angličtina, atď.
-5. **IT zručnosti** - Práca s počítačom
-6. **Schopnosti** - Osobnostné vlastnosti
+**Typy testov** (editovateľné číselníky):
+- Štátny jazyk
+- Cudzí jazyk
+- IT zručnosti
+- Odborný test
+- Všeobecný test
+- Schopnosti a vlastnosti
+
+**Kategórie testov** (editovateľné, patria k typu):
+- Typ → Kategórie (napr. "Štátny jazyk" → "A1", "A2", "B1", "B2")
+- Každý test patrí do jednej kategórie
+- Flexibilná hierarchická organizácia
 
 ---
 

@@ -1,5 +1,14 @@
 # Databázový model - Prisma Schema
 
+## Poznámka k aktuálnemu stavu
+
+**Hybridný systém testov:**
+- ✅ **Nový systém** - `TestType` a `TestCategory` modely pre editovateľnú organizáciu testov
+- 🔄 **Starý systém** - Enum `TestTyp` stále existuje v schéme (legacy)
+- Test model obsahuje `categoryId` (nový) aj `type` (starý)
+
+---
+
 ## Kompletná Prisma schéma
 
 ```prisma
@@ -16,9 +25,6 @@ datasource db {
 
 // ==================== USERS & AUTH ====================
 
-// POZNÁMKA: Zvážiť oddelené tabuľky pre trvalé účty (User) a dočasné účty (Candidate)
-// Viď docs/15-otvorene-otazky.md - Otázka #2
-
 enum UserRole {
   SUPERADMIN  // Správca celého systému, spravuje rezorty a adminov
   ADMIN       // Správca rezortu, vytvára VK
@@ -29,32 +35,28 @@ enum UserRole {
 
 // ==================== MULTI-TENANCY: REZORTY ====================
 
-// Institution (Rezort) - Organizačná jednotka (ministerstvo, úrad)
-// Každý Admin je priradený k 1 alebo viacerým rezortom
-// Každé VK patrí k 1 rezortu
-// Gestor/Komisia môžu byť priradení k VK z iného rezortu (zdieľaní experti)
 model Institution {
   id          String   @id @default(cuid())
-  name        String                           // "Ministerstvo zahraničných vecí a európskych záležitostí"
-  code        String   @unique                 // "MZVaEZ" (krátky kód)
-  description String?                          // voliteľný popis
+  name        String
+  code        String   @unique
+  description String?
 
-  // Status
-  active      Boolean  @default(true)          // aktívny rezort?
+  active      Boolean  @default(true)
 
-  // Metadata
+  // Generated search columns for diacritic-insensitive search
+  name_search        String? @map("name_search")
+  code_search        String? @map("code_search")
+  description_search String? @map("description_search")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relations
-  users       UserInstitution[]                // M:N admini priradení k rezortu
-  vks         VyberoveKonanie[]                // VK patriace tomuto rezortu
+  users       UserInstitution[]
+  vks         VyberoveKonanie[]
 
   @@map("institutions")
 }
 
-// M:N join table pre User <-> Institution
-// Admin môže byť priradený k viacerým rezortom
 model UserInstitution {
   id            String   @id @default(cuid())
 
@@ -64,53 +66,45 @@ model UserInstitution {
   institutionId String
   institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
 
-  // Kedy bol admin priradený k rezortu
   assignedAt    DateTime @default(now())
-  assignedBy    String?                        // kto ho priradil (Superadmin ID)
+  assignedBy    String?
 
-  @@unique([userId, institutionId])            // Jeden user len 1x v jednom rezorte
+  @@unique([userId, institutionId])
   @@map("user_institutions")
 }
 
-// User model - Trvalé účty (Superadmin, Admin, Gestor, Komisia)
-// SOFT DELETE: Pri vymazaní: email = NULL, deletedEmail = pôvodný email, deleted = true
 model User {
   id            String   @id @default(cuid())
-  username      String   @unique               // prihlasovacie meno (unikátne!)
-  email         String?  @unique               // email (nullable kvôli soft delete)
-  password      String?                        // heslo (Bcrypt hashed) - NULL ak ešte nie je nastavené!
-  name          String                         // meno
-  surname       String                         // priezvisko
-  role          UserRole                       // rola
-  note          String?                        // poznámka (špecializácia, odbor, atď.)
+  username      String   @unique
+  email         String?  @unique
+  password      String?
+  name          String
+  surname       String
+  role          UserRole
+  note          String?
 
-  // 2FA / OTP
-  otpSecret     String?                        // OTP tajný kľúč
-  otpEnabled    Boolean  @default(false)       // 2FA zapnuté?
-  recoveryCode  String?                        // recovery kód
+  otpSecret     String?
+  otpEnabled    Boolean  @default(false)
+  recoveryCode  String?
 
-  // Password set token (pre nových používateľov)
-  passwordSetToken       String?   @unique    // token na nastavenie hesla
-  passwordSetTokenExpiry DateTime?            // expirácia tokenu (24h)
+  passwordSetToken       String?   @unique
+  passwordSetTokenExpiry DateTime?
 
-  // Soft delete
-  deleted       Boolean  @default(false)       // soft delete flag
-  deletedAt     DateTime?                      // kedy vymazaný
-  deletedEmail  String?                        // pôvodný email vymazaného používateľa
+  deleted       Boolean  @default(false)
+  deletedAt     DateTime?
+  deletedEmail  String?
 
-  // Metadata
-  active        Boolean  @default(true)        // aktívny?
-  temporaryAccount Boolean @default(false)     // dočasný účet uchádzača?
-  archivedAt    DateTime?                      // kedy archivovaný (len pre UCHADZAC)
-  createdAt     DateTime @default(now())       // dátum vytvorenia
-  updatedAt     DateTime @updatedAt            // dátum aktualizácie
-  lastLoginAt   DateTime?                      // posledné prihlásenie
+  active        Boolean  @default(true)
+  temporaryAccount Boolean @default(false)
+  archivedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
 
-  // Relations
-  institutions  UserInstitution[]              // M:N rezorty, kde je admin priradený
+  institutions  UserInstitution[]
   createdVKs    VyberoveKonanie[]  @relation("CreatedBy")
-  gestorVKs     VyberoveKonanie[]  @relation("GestorVK")  // VK kde je gestorom
-  candidates    Candidate[]                    // uchádzač môže byť v N VK (teoreticky, prakticky 1)
+  gestorVKs     VyberoveKonanie[]  @relation("GestorVK")
+  candidates    Candidate[]
   commissionMemberships CommissionMember[]
   evaluations   Evaluation[]
   auditLogs     AuditLog[]
@@ -123,37 +117,30 @@ model User {
 
 model VyberoveKonanie {
   id                String   @id @default(cuid())
-  identifier        String   @unique            // identifikátor VK (napr. VK/2025/1234)
+  identifier        String   @unique
 
-  // Multi-tenancy: Rezort
-  institutionId     String                      // rezort, ku ktorému VK patrí
+  institutionId     String
   institution       Institution @relation(fields: [institutionId], references: [id])
 
-  // Fixné polia z hlavičky
-  selectionType     String                      // druh konania
-  organizationalUnit String                     // organizačný útvar
-  serviceField      String                      // odbor štátnej služby
-  position          String                      // funkcia
-  serviceType       String                      // druh štátnej služby
-  date              DateTime                    // dátum
+  selectionType     String
+  organizationalUnit String
+  serviceField      String
+  position          String
+  serviceType       String
+  date              DateTime
 
-  // Počet obsadzovaných miest
-  numberOfPositions Int      @default(1)        // počet miest
+  numberOfPositions Int      @default(1)
 
-  // Status
-  status            VKStatus @default(PRIPRAVA) // status VK
+  status            VKStatus @default(PRIPRAVA)
 
-  // Priradení ľudia
-  gestorId          String?                     // gestor pre toto VK (voliteľné, môže byť z iného rezortu!)
+  gestorId          String?
   gestor            User?    @relation("GestorVK", fields: [gestorId], references: [id])
 
-  // Metadata
-  createdById       String                      // vytvoril (user ID)
+  createdById       String
   createdBy         User     @relation("CreatedBy", fields: [createdById], references: [id])
-  createdAt         DateTime @default(now())    // dátum vytvorenia
-  updatedAt         DateTime @updatedAt         // dátum aktualizácie
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  // Relations
   candidates        Candidate[]
   assignedTests     VKTest[]
   commission        Commission?
@@ -164,48 +151,80 @@ model VyberoveKonanie {
 }
 
 enum VKStatus {
-  PRIPRAVA           // Admin pripravuje
-  CAKA_NA_TESTY      // Čaká na schválené testy
-  TESTOVANIE         // Prebieha testovanie
-  HODNOTENIE         // Prebieha hodnotenie komisiou
-  DOKONCENE          // VK dokončené
-  ZRUSENE            // VK zrušené
+  PRIPRAVA
+  CAKA_NA_TESTY
+  TESTOVANIE
+  HODNOTENIE
+  DOKONCENE
+  ZRUSENE
 }
 
 // ==================== TESTY ====================
 
 model Test {
   id            String     @id @default(cuid())
-  name          String                         // názov testu
-  type          TestTyp                        // typ testu
-  description   String?                        // popis
+  name          String
+  type          TestTyp                        // Legacy enum (bude odstránený)
+  description   String?
 
-  // Otázky (JSON array)
-  questions     Json                           // otázky (Question[])
+  questions     Json
 
-  // Nastavenia (pre schválenie)
-  recommendedQuestionCount  Int?              // odporúčaný počet otázok
-  recommendedDuration       Int?              // odporúčaná minutáž
-  recommendedScore          Float?            // odporúčané body
+  recommendedQuestionCount  Int?
+  recommendedDuration       Int?
+  recommendedScore          Float?
+  difficulty    Int?       @default(5)         // 1-10
 
-  // Status
-  approved      Boolean    @default(false)    // schválený?
-  approvedAt    DateTime?                     // dátum schválenia
+  approved      Boolean    @default(false)
+  approvedAt    DateTime?
 
-  // Autor
-  authorId      String?                       // autor (user ID)
+  authorId      String?
 
-  // Metadata
-  createdAt     DateTime   @default(now())    // dátum vytvorenia
-  updatedAt     DateTime   @updatedAt         // dátum aktualizácie
+  // NOVÁ organizácia testov
+  categoryId    String?
+  category      TestCategory? @relation(fields: [categoryId], references: [id])
 
-  // Relations
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
   vkAssignments VKTest[]
   results       TestResult[]
 
   @@map("tests")
 }
 
+// NOVÝ model pre typy testov (editovateľné)
+model TestType {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+
+  categories  TestCategory[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("test_types")
+}
+
+// NOVÝ model pre kategórie testov (editovateľné)
+model TestCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+
+  typeId      String?
+  type        TestType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
+
+  description String?
+
+  tests       Test[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("test_categories")
+}
+
+// LEGACY enum (bude odstránený)
 enum TestTyp {
   ODBORNY
   VSEOBECNY
@@ -215,7 +234,6 @@ enum TestTyp {
   SCHOPNOSTI_VLASTNOSTI
 }
 
-// M:N relation VK <-> Test s konfiguráciou
 model VKTest {
   id            String   @id @default(cuid())
 
@@ -225,67 +243,48 @@ model VKTest {
   testId        String
   test          Test     @relation(fields: [testId], references: [id])
 
-  // Level v poradí (1, 2, 3...)
-  level         Int                           // level testu
+  level         Int
 
-  // Konfigurácia pre tento VK
-  questionCount Int                           // počet otázok
-  durationMinutes Int                         // čas v minútach
-  scorePerQuestion Float                      // body za otázku
-  minScore      Float                         // minimálne body na úspech
+  questionCount Int
+  durationMinutes Int
+  scorePerQuestion Float
+  minScore      Float
 
-  createdAt     DateTime @default(now())      // dátum vytvorenia
+  createdAt     DateTime @default(now())
 
   @@unique([vkId, testId])
-  @@unique([vkId, level])  // Každý level len raz
+  @@unique([vkId, level])
   @@map("vk_tests")
 }
 
-// Question type (stored in JSON)
-// {
-//   id: string,
-//   question: string,        // otázka
-//   answers: string[],       // 3 odpovede
-//   correctAnswer: number    // správna odpoveď - index (0, 1, 2)
-// }
-
 // ==================== KANDIDÁTI ====================
 
-// Candidate model - Dočasné účty uchádzačov (viazané na VK)
-// POZNÁMKA: Zvážiť oddelenie od User tabuľky (samostatná tabuľka bez userId)
-// SOFT DELETE: Pri vymazaní: email = NULL, deletedEmail = pôvodný email, deleted = true
 model Candidate {
   id                String   @id @default(cuid())
 
   vkId              String
   vk                VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
 
-  userId            String   // BEZ @unique - umožní N:1 (user môže mať viac candidates pre rôzne VK)
+  userId            String
   user              User     @relation(fields: [userId], references: [id])
 
-  // Identifikátor z CIS ŠS (používa sa ako login!)
-  cisIdentifier     String                      // identifikátor z CIS ŠS
+  cisIdentifier     String
 
-  // Kontaktné údaje
-  email             String?                     // email uchádzača (voliteľné)
+  email             String?
 
-  // Status
-  isArchived        Boolean  @default(false)    // archivovaný po skončení VK?
+  isArchived        Boolean  @default(false)
 
-  // Soft delete
-  deleted           Boolean  @default(false)    // soft delete flag
-  deletedAt         DateTime?                   // kedy vymazaný
-  deletedEmail      String?                     // pôvodný email vymazaného uchádzača
+  deleted           Boolean  @default(false)
+  deletedAt         DateTime?
+  deletedEmail      String?
 
-  // Metadata
-  registeredAt      DateTime @default(now())    // dátum registrácie
+  registeredAt      DateTime @default(now())
 
-  // Relations
   testResults       TestResult[]
   documents         Document[]
   evaluations       Evaluation[]
 
-  @@unique([vkId, cisIdentifier])  // Ten istý CIS ID môže byť len 1x v jednom VK
+  @@unique([vkId, cisIdentifier])
   @@map("candidates")
 }
 
@@ -303,20 +302,17 @@ model TestResult {
   userId        String
   user          User     @relation(fields: [userId], references: [id])
 
-  // Výsledky
-  answers       Json                           // odpovede ({ questionId: answerIndex }[])
-  score         Float                          // body získané
-  maxScore      Float                          // maximálne body
-  successRate   Float                          // percento úspešnosti (0-100)
-  passed        Boolean                        // prešiel minimálnym prahom?
+  answers       Json
+  score         Float
+  maxScore      Float
+  successRate   Float
+  passed        Boolean
 
-  // Čas
-  startedAt     DateTime                       // čas začiatku testu
-  completedAt   DateTime?                      // čas dokončenia testu
-  durationSeconds Int?                         // trvanie v sekundách
+  startedAt     DateTime
+  completedAt   DateTime?
+  durationSeconds Int?
 
-  // Metadata
-  createdAt     DateTime @default(now())       // dátum vytvorenia
+  createdAt     DateTime @default(now())
 
   @@unique([candidateId, testId])
   @@map("test_results")
@@ -330,11 +326,10 @@ model Commission {
   vkId          String   @unique
   vk            VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
 
-  chairmanId    String?  // predseda komisie - ID používateľa
+  chairmanId    String?
 
   createdAt     DateTime @default(now())
 
-  // Relations
   members       CommissionMember[]
 
   @@map("commissions")
@@ -349,11 +344,10 @@ model CommissionMember {
   userId        String
   user          User     @relation(fields: [userId], references: [id])
 
-  isChairman    Boolean  @default(false)  // je predseda komisie?
+  isChairman    Boolean  @default(false)
 
   createdAt     DateTime @default(now())
 
-  // Relations
   evaluations   Evaluation[]
 
   @@unique([commissionId, userId])
@@ -362,21 +356,18 @@ model CommissionMember {
 
 // ==================== HODNOTENIE ====================
 
-// Konfigurácia hodnotenia pre VK
 model EvaluationConfig {
   id            String   @id @default(cuid())
 
   vkId          String   @unique
   vk            VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
 
-  // Ktoré vlastnosti sa hodnotia (JSON array)
-  evaluatedTraits String[]                     // hodnotené vlastnosti (napr. ["Sebadovera", "Svedomitost", ...])
+  evaluatedTraits String[]
 
-  // Batéria otázok (JSON)
-  questionBattery Json                         // batéria otázok
+  questionBattery Json
 
-  createdAt     DateTime @default(now())       // dátum vytvorenia
-  updatedAt     DateTime @updatedAt            // dátum aktualizácie
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@map("evaluation_configs")
 }
@@ -393,18 +384,14 @@ model Evaluation {
   userId        String
   user          User     @relation(fields: [userId], references: [id])
 
-  // Hodnotenie (JSON)
-  // { vlastnost: string, body: number }[]
-  evaluation    Json     // hodnotenie
+  evaluation    Json
 
-  // Celkové body
-  totalScore    Float    // celkové body
-  maxScore      Float    // maximálne body
-  successRate   Float    // percento úspešnosti
+  totalScore    Float
+  maxScore      Float
+  successRate   Float
 
-  // Status
-  finalized     Boolean  @default(false)  // finalizované?
-  finalizedAt   DateTime?                  // dátum finalizácie
+  finalized     Boolean  @default(false)
+  finalizedAt   DateTime?
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -421,11 +408,11 @@ model Document {
   candidateId   String
   candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
-  type          DocTyp   // typ dokumentu
-  name          String   // názov dokumentu
-  path          String   // relatívna cesta v /uploads
+  type          DocTyp
+  name          String
+  path          String
 
-  uploadedAt    DateTime @default(now())  // dátum nahrania
+  uploadedAt    DateTime @default(now())
 
   @@map("documents")
 }
@@ -443,10 +430,10 @@ model GeneratedDocument {
   vkId          String
   vk            VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
 
-  type          GenDocTyp  // typ dokumentu
-  path          String     // cesta k súboru
+  type          GenDocTyp
+  path          String
 
-  generatedAt   DateTime @default(now())  // dátum generovania
+  generatedAt   DateTime @default(now())
 
   @@map("generated_documents")
 }
@@ -465,22 +452,36 @@ model AuditLog {
   userId        String?
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  action        String   // akcia: "LOGIN", "CREATE_VK", "SUBMIT_TEST", ...
-  entity        String?  // entita: "VK", "User", "Test", ...
-  entityId      String?  // ID entity
+  action        String
+  entity        String?
+  entityId      String?
 
-  // Dodatočné info (JSON)
-  details       Json?    // dodatočné detaily
+  details       Json?
+  previousValue Json?
+  newValue      Json?
 
-  // IP adresa
-  ipAddress     String?  // IP adresa používateľa
+  ipAddress     String?
+  userAgent     String?
+  sessionId     String?
+  requestId     String?
 
-  timestamp     DateTime @default(now())  // čas akcie
+  severity      LogSeverity @default(INFO)
+
+  timestamp     DateTime @default(now())
 
   @@index([userId])
   @@index([action])
+  @@index([entity])
+  @@index([sessionId])
   @@index([timestamp])
+  @@index([severity])
   @@map("audit_logs")
+}
+
+enum LogSeverity {
+  CRITICAL
+  WARNING
+  INFO
 }
 ```
 
@@ -489,11 +490,16 @@ model AuditLog {
 ```
 User
  ├─1:N─► VyberoveKonanie (createdBy)
+ ├─1:N─► VyberoveKonanie (gestor)
  ├─1:1─► Candidate
  ├─1:N─► CommissionMember
  ├─1:N─► Evaluation
  ├─1:N─► TestResult
  └─1:N─► AuditLog
+
+Institution
+ ├─M:N─► User (UserInstitution)
+ └─1:N─► VyberoveKonanie
 
 VyberoveKonanie
  ├─1:N─► Candidate
@@ -501,6 +507,12 @@ VyberoveKonanie
  ├─1:1─► Commission
  ├─1:1─► EvaluationConfig
  └─1:N─► GeneratedDocument
+
+TestType (NOVÝ)
+ └─1:N─► TestCategory
+
+TestCategory (NOVÝ)
+ └─1:N─► Test
 
 Test
  ├─1:N─► VKTest (M:N s VyberoveKonanie)
@@ -527,6 +539,9 @@ const vks = await prisma.vyberoveKonanie.findMany({
     },
     createdBy: {
       select: { name: true, surname: true }
+    },
+    institution: {
+      select: { name: true, code: true }
     }
   }
 });
@@ -540,7 +555,15 @@ const candidate = await prisma.candidate.findUnique({
     user: true,
     testResults: {
       include: {
-        test: true
+        test: {
+          include: {
+            category: {
+              include: {
+                type: true
+              }
+            }
+          }
+        }
       }
     },
     evaluations: {
@@ -557,34 +580,50 @@ const candidate = await prisma.candidate.findUnique({
 });
 ```
 
-### 3. Získať výsledky VK
+### 3. Získať testy podľa kategórie
 ```typescript
-const vysledky = await prisma.candidate.findMany({
-  where: { vkId },
+const tests = await prisma.test.findMany({
+  where: {
+    categoryId: categoryId
+  },
   include: {
-    user: true,
-    testResults: {
-      select: {
-        score: true,        // body
-        maxScore: true,     // maximálne body
-        passed: true        // prešiel?
+    category: {
+      include: {
+        type: true
       }
     },
-    evaluations: {
+    _count: {
       select: {
-        totalScore: true,   // celkové body
-        maxScore: true,     // maximálne body
-        successRate: true   // percento úspešnosti
+        vkAssignments: true
       }
     }
-  },
-  orderBy: {
-    // Custom ordering based on total score
   }
 });
 ```
 
-### 4. Audit log pre používateľa
+### 4. Získať typy testov s kategóriami a počtom testov
+```typescript
+const testTypes = await prisma.testType.findMany({
+  include: {
+    categories: {
+      include: {
+        _count: {
+          select: {
+            tests: true
+          }
+        }
+      }
+    },
+    _count: {
+      select: {
+        categories: true
+      }
+    }
+  }
+});
+```
+
+### 5. Audit log pre používateľa
 ```typescript
 const logs = await prisma.auditLog.findMany({
   where: {
@@ -600,23 +639,11 @@ const logs = await prisma.auditLog.findMany({
 });
 ```
 
-## Indexes pre performance
-
-```prisma
-// V models pridať:
-
-@@index([email])         // User - rýchle vyhľadávanie
-@@index([identifier])    // VK - unique anyway
-@@index([vkId])          // Všetky relácie s VK
-@@index([candidateId])   // Všetky relácie s kandidátom
-@@index([timestamp])     // AuditLog - chronologické dotazy
-```
-
 ## Migrácie
 
 ### Vytvorenie migrácie:
 ```bash
-npx prisma migrate dev --name init
+npx prisma migrate dev --name migration_name
 ```
 
 ### Aplikovanie migrácií:
@@ -639,33 +666,74 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Create admin user
+  // Create institution
+  const institution = await prisma.institution.create({
+    data: {
+      name: 'Ministerstvo vnútra SR',
+      code: 'MVSR',
+      description: 'Ministerstvo vnútra Slovenskej republiky'
+    }
+  });
+
+  // Create superadmin user
+  const superadmin = await prisma.user.create({
+    data: {
+      username: 'superadmin',
+      email: 'superadmin@retry.sk',
+      password: await bcrypt.hash('Hackaton25', 10),
+      name: 'Super',
+      surname: 'Admin',
+      role: UserRole.SUPERADMIN,
+      otpEnabled: false,
+    }
+  });
+
+  // Create admin user and link to institution
   const admin = await prisma.user.create({
     data: {
-      email: 'admin@mirri.gov.sk',
-      password: await bcrypt.hash('Admin123!', 10),
-      name: 'Hlavný',
-      surname: 'Admin',
+      username: 'admin.mv',
+      email: 'admin.mv@retry.sk',
+      password: await bcrypt.hash('Test1234', 10),
+      name: 'Admin',
+      surname: 'MV',
       role: UserRole.ADMIN,
-      otpEnabled: true,
+      otpEnabled: false,
+      institutions: {
+        create: {
+          institutionId: institution.id
+        }
+      }
     }
   });
 
-  // Create sample VK
-  const vk = await prisma.vyberoveKonanie.create({
+  // Create test types
+  const statnyJazyk = await prisma.testType.create({
     data: {
-      identifier: 'VK/2025/0001',
-      selectionType: 'širšie vnútorné výberové konanie',
-      organizationalUnit: 'Odbor implementácie OKP',
-      serviceField: '1.03 – Medzinárodná spolupráca',
-      position: 'hlavný štátny radca',
-      serviceType: 'stála štátna služba',
-      date: new Date('2025-07-24'),
-      createdById: admin.id,
+      name: 'Štátny jazyk',
+      description: 'Testy z slovenského jazyka'
     }
   });
 
-  console.log({ admin, vk });
+  const cudziJazyk = await prisma.testType.create({
+    data: {
+      name: 'Cudzí jazyk',
+      description: 'Testy z cudzích jazykov'
+    }
+  });
+
+  // Create test categories
+  await prisma.testCategory.createMany({
+    data: [
+      { name: 'A1', typeId: statnyJazyk.id },
+      { name: 'A2', typeId: statnyJazyk.id },
+      { name: 'B1', typeId: statnyJazyk.id },
+      { name: 'B2', typeId: statnyJazyk.id },
+      { name: 'Anglický jazyk - A2', typeId: cudziJazyk.id },
+      { name: 'Anglický jazyk - B2', typeId: cudziJazyk.id },
+    ]
+  });
+
+  console.log({ institution, superadmin, admin, statnyJazyk, cudziJazyk });
 }
 
 main()
@@ -677,3 +745,58 @@ Spustenie seedu:
 ```bash
 npx prisma db seed
 ```
+
+## Nová organizácia testov (TestType & TestCategory)
+
+### Koncept
+
+**TestType** (Typ testu) - Editovateľný číselník hlavných typov testov:
+- Štátny jazyk
+- Cudzí jazyk
+- IT zručnosti
+- Odborný test
+- Všeobecný test
+- Schopnosti a vlastnosti
+
+**TestCategory** (Kategória testu) - Editovateľný číselník podkategórií v rámci typu:
+- Patrí k TestType (voliteľne - ON DELETE SET NULL)
+- Každý test má categoryId
+- Umožňuje jemnú organizáciu testov
+
+**Príklad hierarchie:**
+```
+TestType: Štátny jazyk
+  ├─ TestCategory: A1
+  ├─ TestCategory: A2
+  ├─ TestCategory: B1
+  └─ TestCategory: B2
+
+TestType: Cudzí jazyk
+  ├─ TestCategory: Anglický jazyk - A2
+  ├─ TestCategory: Anglický jazyk - B2
+  └─ TestCategory: Nemecký jazyk - B1
+```
+
+### Výhody novej organizácie
+
+✅ **Flexibilita** - Typy a kategórie môžu byť vytvorené a upravené počas prevádzky
+✅ **Rozšíriteľnosť** - Jednoduché pridanie nových typov/kategórií
+✅ **Hierarchická organizácia** - Typ → Kategória → Test
+✅ **Audit trail** - Zmeny typov/kategórií sú sledovateľné
+
+### API Endpointy pre typy a kategórie
+
+- `GET /api/admin/test-types` - Zoznam typov testov
+- `POST /api/admin/test-types` - Vytvorenie typu testu
+- `PATCH /api/admin/test-types/:id` - Úprava typu testu
+- `DELETE /api/admin/test-types/:id` - Zmazanie typu testu
+
+- `GET /api/admin/test-categories` - Zoznam kategórií testov
+- `POST /api/admin/test-categories` - Vytvorenie kategórie testu
+- `PATCH /api/admin/test-categories/:id` - Úprava kategórie testu
+- `DELETE /api/admin/test-categories/:id` - Zmazanie kategórie testu
+
+---
+
+**Posledná aktualizácia:** Október 2025
+**Verzia:** 2.0.0 (s editovateľnými typmi a kategóriami testov)
