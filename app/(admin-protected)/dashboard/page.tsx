@@ -6,9 +6,7 @@ import {
 } from '@heroicons/react/24/outline'
 
 import { auth } from '@/auth'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/lib/prisma'
 
 async function getDashboardData() {
   try {

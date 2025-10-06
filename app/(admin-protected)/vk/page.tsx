@@ -225,6 +225,7 @@ export default function VKPage() {
           {/* Status filter */}
           <div>
             <Select
+              inputId="status-filter"
               value={statusFilter}
               onChange={(selected) => setStatusFilter(selected as StatusOption)}
               options={statusOptions}
@@ -258,6 +259,7 @@ export default function VKPage() {
             }
           }}
           pageSizeOptions={[10, 20, 50, 100]}
+          onRowClick={(vk) => router.push(`/vk/${vk.id}`)}
         />
       )}
     </div>

@@ -175,7 +175,7 @@ export default function InstitutionsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="institutions-page">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -186,6 +186,7 @@ export default function InstitutionsPage() {
         </div>
         <Link
           href="/institutions/new"
+          data-testid="add-institution-button"
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           <PlusIcon className="h-5 w-5" />
@@ -201,7 +202,8 @@ export default function InstitutionsPage() {
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
               type="text"
-              placeholder="🔍 Hľadať..."
+              data-testid="search-input"
+              placeholder="Hľadať..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -213,20 +215,22 @@ export default function InstitutionsPage() {
             <label className="flex items-center">
               <input
                 type="checkbox"
+                data-testid="filter-active"
                 checked={showActive}
                 onChange={(e) => setShowActive(e.target.checked)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">☑ Aktívne</span>
+              <span className="ml-2 text-sm text-gray-700">Aktívne</span>
             </label>
             <label className="flex items-center">
               <input
                 type="checkbox"
+                data-testid="filter-inactive"
                 checked={showInactive}
                 onChange={(e) => setShowInactive(e.target.checked)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">☐ Neaktívne</span>
+              <span className="ml-2 text-sm text-gray-700">Neaktívne</span>
             </label>
           </div>
         </div>
@@ -238,7 +242,7 @@ export default function InstitutionsPage() {
           <div className="text-gray-500">Načítavam...</div>
         </div>
       ) : institutions.length === 0 ? (
-        <div className="bg-white p-12 rounded-lg shadow text-center">
+        <div className="bg-white p-12 rounded-lg shadow text-center" data-testid="no-data-message">
           <p className="text-gray-500 mb-4">Žiadne rezorty</p>
           <Link
             href="/institutions/new"
@@ -249,7 +253,9 @@ export default function InstitutionsPage() {
           </Link>
         </div>
       ) : (
-        <DataTable columns={columns} data={institutions} />
+        <div data-testid="institutions-table">
+          <DataTable columns={columns} data={institutions} />
+        </div>
       )}
     </div>
   )
