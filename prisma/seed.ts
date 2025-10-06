@@ -270,6 +270,29 @@ async function main() {
   console.log(`\n✅ Created ${gestorUsers.length} additional gestors`)
   console.log(`✅ Created ${komisiaUsers.length} additional commission members`)
 
+  // 7. Create Test Types
+  console.log('\nCreating test types...')
+
+  const testTypes = [
+    { name: 'Štátny jazyk', description: 'Testy na ovládanie štátneho jazyka (slovenčina)' },
+    { name: 'Cudzí jazyk', description: 'Testy na ovládanie cudzích jazykov (angličtina, nemčina, francúzština, ...)' },
+    { name: 'IT zručnosti', description: 'Testy na overenie znalostí z oblasti informačných technológií' },
+    { name: 'Odborný', description: 'Testy na overenie odborných znalostí' },
+    { name: 'Všeobecný', description: 'Testy všeobecných znalostí' },
+    { name: 'Schopnosti a vlastnosti', description: 'Testy na overenie osobnostných vlastností a schopností' },
+  ]
+
+  for (const typeData of testTypes) {
+    await prisma.testType.upsert({
+      where: { name: typeData.name },
+      update: {},
+      create: typeData,
+    })
+    console.log(`  ✅ Created test type: ${typeData.name}`)
+  }
+
+  console.log(`✅ Created ${testTypes.length} test types`)
+
   console.log('\n✅ Seed completed!')
   console.log('\nTest accounts:')
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
