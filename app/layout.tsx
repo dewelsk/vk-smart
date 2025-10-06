@@ -4,6 +4,9 @@ import './globals.css'
 import dynamic from 'next/dynamic'
 import { QueryProvider } from '@/components/providers/QueryProvider'
 import { SessionProvider } from '@/components/providers/SessionProvider'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { ToastProvider } from '@/components/Toast'
+import { BackendErrorMonitor } from '@/components/BackendErrorMonitor'
 
 // DebugBar must be client-only (uses usePathname, useRouter)
 const DebugBar = dynamic(() => import('@/components/dev/DebugBar').then(mod => ({ default: mod.DebugBar })), {
@@ -29,11 +32,16 @@ export default function RootLayout({
   return (
     <html lang="sk">
       <body className={roboto.className}>
-        <SessionProvider>
-          <QueryProvider>
-            {children}
-          </QueryProvider>
-        </SessionProvider>
+        <ErrorBoundary>
+          <ToastProvider>
+            <BackendErrorMonitor />
+            <SessionProvider>
+              <QueryProvider>
+                {children}
+              </QueryProvider>
+            </SessionProvider>
+          </ToastProvider>
+        </ErrorBoundary>
         {/* <DebugBar /> */}
       </body>
     </html>
