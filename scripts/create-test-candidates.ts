@@ -12,19 +12,47 @@ const testCandidates = [
   { name: 'Zuzana', surname: 'Králová' },
   { name: 'Tomáš', surname: 'Szabó' },
   { name: 'Lucia', surname: 'Fabiánová' },
+  { name: 'Pavol', surname: 'Kováčik' },
+  { name: 'Katarína', surname: 'Hudecová' },
+  { name: 'Miroslav', surname: 'Pavlík' },
+  { name: 'Adriana', surname: 'Šimková' },
+  { name: 'Róbert', surname: 'Lazár' },
+  { name: 'Gabriela', surname: 'Nemcová' },
+  { name: 'Dušan', surname: 'Čech' },
+  { name: 'Monika', surname: 'Gáborová' },
+  { name: 'Vladimír', surname: 'Urban' },
+  { name: 'Renáta', surname: 'Lukáčová' },
 ]
 
 async function main() {
-  console.log('Creating 10 test candidates...\n')
+  console.log('Creating test candidates...\n')
 
   const timestamp = Date.now()
   const hashedPassword = await bcrypt.hash('test123', 10)
+
+  let created = 0
+  let skipped = 0
 
   for (let i = 0; i < testCandidates.length; i++) {
     const candidate = testCandidates[i]
     const cisId = `CIS${timestamp + i}`
     const username = cisId
     const email = `${candidate.name.toLowerCase()}.${candidate.surname.toLowerCase()}.${timestamp + i}@test.sk`
+
+    // Check if candidate already exists with the same name and surname
+    const existingByName = await prisma.user.findFirst({
+      where: {
+        name: candidate.name,
+        surname: candidate.surname,
+        role: 'UCHADZAC',
+      },
+    })
+
+    if (existingByName) {
+      console.log(`⏭️  Skipped: ${candidate.name} ${candidate.surname} (already exists)`)
+      skipped++
+      continue
+    }
 
     const user = await prisma.user.create({
       data: {
@@ -40,15 +68,16 @@ async function main() {
     })
 
     console.log(`✅ Created: ${user.name} ${user.surname} (${user.username}, ${user.email})`)
+    created++
   }
 
-  console.log('\n✨ Successfully created 10 test candidates!')
+  console.log(`\n✨ Summary: Created ${created} new candidates, skipped ${skipped} duplicates`)
 
   const totalCandidates = await prisma.user.count({
     where: { role: 'UCHADZAC', active: true }
   })
 
-  console.log(`\n📊 Total active UCHADZAC users: ${totalCandidates}`)
+  console.log(`📊 Total active UCHADZAC users: ${totalCandidates}`)
 }
 
 main()
