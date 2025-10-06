@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
-import { PrismaClient, UserRole } from '@prisma/client'
+import { UserRole  } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 
-const prisma = new PrismaClient()
 
 describe('Applicants API', () => {
   let testVKId: string | null = null

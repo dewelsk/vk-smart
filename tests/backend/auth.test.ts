@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { PrismaClient, UserRole } from '@prisma/client'
+import { UserRole  } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 
-const prisma = new PrismaClient()
 
 describe('Authentication Backend Tests', () => {
   beforeAll(async () => {

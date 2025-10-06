@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { PrismaClient, VKStatus, UserRole } from '@prisma/client'
+import { VKStatus, UserRole  } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 
-const prisma = new PrismaClient()
 
 describe('Dashboard API', () => {
   beforeAll(async () => {
