@@ -12,6 +12,8 @@ import {
   BuildingOfficeIcon,
   Bars3Icon,
   XMarkIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline'
 import type { Session } from 'next-auth'
 
@@ -19,23 +21,56 @@ interface SidebarProps {
   session: Session
 }
 
+type NavItem = {
+  name: string
+  href?: string
+  icon: any
+  roles: string[]
+  children?: { name: string; href: string }[]
+}
+
 export default function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [expandedItems, setExpandedItems] = useState<string[]>([])
 
-  const navigation = [
+  const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: ChartBarIcon, roles: ['SUPERADMIN', 'ADMIN'] },
     { name: 'Rezorty', href: '/institutions', icon: BuildingOfficeIcon, roles: ['SUPERADMIN'] },
     { name: 'Výberové konania', href: '/vk', icon: ClipboardDocumentListIcon, roles: ['SUPERADMIN', 'ADMIN'] },
     { name: 'Používatelia', href: '/users', icon: UsersIcon, roles: ['SUPERADMIN', 'ADMIN'] },
     { name: 'Uchádzači', href: '/applicants', icon: AcademicCapIcon, roles: ['SUPERADMIN', 'ADMIN'] },
-    { name: 'Testy', href: '/tests', icon: DocumentTextIcon, roles: ['SUPERADMIN', 'ADMIN'] },
+    {
+      name: 'Testy',
+      icon: DocumentTextIcon,
+      roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'],
+      children: [
+        { name: 'Zoznam testov', href: '/tests' },
+        { name: 'Typy testov', href: '/tests/types' },
+        { name: 'Kategórie testov', href: '/tests/categories' },
+        { name: 'Precvičovanie', href: '/tests/practice' },
+      ]
+    },
   ]
 
   // Filter navigation based on user role
   const filteredNavigation = navigation.filter(item =>
     item.roles.includes(session.user.role)
   )
+
+  // Auto-expand parent items if child is active
+  const isChildActive = (children?: { name: string; href: string }[]) => {
+    if (!children) return false
+    return children.some(child => pathname === child.href || pathname.startsWith(child.href + '/'))
+  }
+
+  const toggleExpanded = (itemName: string) => {
+    setExpandedItems(prev =>
+      prev.includes(itemName)
+        ? prev.filter(name => name !== itemName)
+        : [...prev, itemName]
+    )
+  }
 
   return (
     <>
@@ -70,12 +105,69 @@ export default function Sidebar({ session }: SidebarProps) {
       >
         <nav className="mt-16 md:mt-5 px-2">
           {filteredNavigation.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+            const hasChildren = item.children && item.children.length > 0
+            const isExpanded = expandedItems.includes(item.name) || isChildActive(item.children)
+            const isActive = item.href ? (pathname === item.href || pathname.startsWith(item.href + '/')) : false
             const Icon = item.icon
+
+            if (hasChildren) {
+              return (
+                <div key={item.name} className="mb-1">
+                  <button
+                    onClick={() => toggleExpanded(item.name)}
+                    className={`
+                      w-full group flex items-center justify-between px-2 py-2 text-sm font-medium rounded-md
+                      ${
+                        isChildActive(item.children)
+                          ? 'bg-gray-900 text-white'
+                          : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                      }
+                    `}
+                  >
+                    <div className="flex items-center">
+                      <Icon className="mr-3 h-5 w-5" />
+                      {item.name}
+                    </div>
+                    {isExpanded ? (
+                      <ChevronDownIcon className="h-4 w-4" />
+                    ) : (
+                      <ChevronRightIcon className="h-4 w-4" />
+                    )}
+                  </button>
+
+                  {isExpanded && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      {item.children?.map((child) => {
+                        const isChildItemActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                        return (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            prefetch={false}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`
+                              block px-2 py-2 text-sm rounded-md
+                              ${
+                                isChildItemActive
+                                  ? 'bg-gray-900 text-white font-medium'
+                                  : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                              }
+                            `}
+                          >
+                            {child.name}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
             return (
               <Link
                 key={item.name}
-                href={item.href}
+                href={item.href!}
                 prefetch={false}
                 onClick={() => setMobileMenuOpen(false)}
                 className={`
