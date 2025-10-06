@@ -30,6 +30,11 @@ model Institution {
 
   active      Boolean  @default(true)
 
+  // Generated search columns for diacritic-insensitive search
+  name_search        String? @map("name_search")
+  code_search        String? @map("code_search")
+  description_search String? @map("description_search")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
