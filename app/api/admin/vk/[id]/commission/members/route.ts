@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 
-const prisma = new PrismaClient()
 
-// POST /api/admin/vk/:id/commission/members - Add member to commission
+// POST /api/admin/vk/:id/commission/members - Add member(s) to commission
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -19,11 +18,14 @@ export async function POST(
 
     const vkId = params.id
     const body = await request.json()
-    const { userId, isChairman } = body
+    const { userIds, chairmanId } = body
 
-    if (!userId) {
+    // Support both single user (legacy) and bulk add
+    const userIdsArray = Array.isArray(userIds) ? userIds : (body.userId ? [body.userId] : [])
+
+    if (userIdsArray.length === 0) {
       return NextResponse.json(
-        { error: 'userId is required' },
+        { error: 'userIds is required' },
         { status: 400 }
       )
     }
@@ -78,68 +80,85 @@ export async function POST(
       })
     }
 
-    // Check if user exists and has KOMISIA role
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    if (user.role !== 'KOMISIA') {
-      return NextResponse.json(
-        { error: 'User is not a commission member (role KOMISIA)' },
-        { status: 400 }
-      )
-    }
-
-    if (!user.active) {
-      return NextResponse.json(
-        { error: 'User is not active' },
-        { status: 400 }
-      )
-    }
-
-    // Check if user is already in commission
-    const existingMember = await prisma.commissionMember.findUnique({
+    // Validate all users
+    const users = await prisma.user.findMany({
       where: {
-        commissionId_userId: {
-          commissionId: commission.id,
-          userId
-        }
+        id: { in: userIdsArray },
+        role: 'KOMISIA',
+        active: true
       }
     })
 
-    if (existingMember) {
+    if (users.length !== userIdsArray.length) {
       return NextResponse.json(
-        { error: 'User is already in commission' },
+        { error: 'One or more users not found, not active, or not KOMISIA role' },
         { status: 400 }
       )
     }
 
-    // If setting as chairman, remove chairman from other members
-    if (isChairman) {
-      await prisma.commissionMember.updateMany({
+    // Get existing members
+    const existingMembers = await prisma.commissionMember.findMany({
+      where: {
+        commissionId: commission.id
+      }
+    })
+
+    // Find members to remove (exist in DB but not in userIdsArray)
+    const existingUserIds = existingMembers.map(m => m.userId)
+    const toRemove = existingUserIds.filter(id => !userIdsArray.includes(id))
+
+    // Find members to add (in userIdsArray but not in DB)
+    const toAdd = userIdsArray.filter(id => !existingUserIds.includes(id))
+
+    // Remove members that are no longer selected
+    if (toRemove.length > 0) {
+      await prisma.commissionMember.deleteMany({
         where: {
           commissionId: commission.id,
-          isChairman: true
-        },
-        data: {
-          isChairman: false
+          userId: { in: toRemove }
         }
       })
     }
 
-    // Add member to commission
-    const member = await prisma.commissionMember.create({
-      data: {
+    // Add new members
+    if (toAdd.length > 0) {
+      const newMembersData = toAdd.map(userId => ({
         commissionId: commission.id,
         userId,
-        isChairman: isChairman || false
+        isChairman: false
+      }))
+      await prisma.commissionMember.createMany({
+        data: newMembersData
+      })
+    }
+
+    // Update chairman status for all members
+    await prisma.commissionMember.updateMany({
+      where: {
+        commissionId: commission.id
+      },
+      data: {
+        isChairman: false
+      }
+    })
+
+    if (chairmanId && userIdsArray.includes(chairmanId)) {
+      await prisma.commissionMember.updateMany({
+        where: {
+          commissionId: commission.id,
+          userId: chairmanId
+        },
+        data: {
+          isChairman: true
+        }
+      })
+    }
+
+    // Fetch created members with user data
+    const createdMembers = await prisma.commissionMember.findMany({
+      where: {
+        commissionId: commission.id,
+        userId: { in: userIdsArray }
       },
       include: {
         user: true
@@ -148,17 +167,17 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      member: {
-        id: member.id,
-        userId: member.userId,
-        isChairman: member.isChairman,
+      members: createdMembers.map(m => ({
+        id: m.id,
+        userId: m.userId,
+        isChairman: m.isChairman,
         user: {
-          id: member.user.id,
-          name: member.user.name,
-          surname: member.user.surname,
-          email: member.user.email
+          id: m.user.id,
+          name: m.user.name,
+          surname: m.user.surname,
+          email: m.user.email
         }
-      }
+      }))
     }, { status: 201 })
 
   } catch (error) {

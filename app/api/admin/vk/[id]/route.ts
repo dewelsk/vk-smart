@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 
-const prisma = new PrismaClient()
 
 // Valid status transitions
 const STATUS_FLOW: Record<string, string[]> = {
@@ -61,6 +60,8 @@ export async function GET(
             id: true,
             cisIdentifier: true,
             isArchived: true,
+            email: true,
+            registeredAt: true,
             user: {
               select: {
                 id: true,
@@ -135,6 +136,8 @@ export async function GET(
         id: c.id,
         cisIdentifier: c.cisIdentifier,
         isArchived: c.isArchived,
+        email: c.email,
+        registeredAt: c.registeredAt,
         user: c.user,
       })),
       assignedTests: vk.assignedTests.map((at) => ({
@@ -148,8 +151,9 @@ export async function GET(
         id: vk.commission.id,
         members: vk.commission.members.map((m) => ({
           id: m.id,
+          userId: m.userId,
+          isChairman: m.isChairman,
           user: m.user,
-          role: m.role,
         })),
       } : null,
       evaluationConfig: vk.evaluationConfig,
