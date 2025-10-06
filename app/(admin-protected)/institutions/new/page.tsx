@@ -186,7 +186,7 @@ export default function NewInstitutionPage() {
                 onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-700">☑ Aktívny rezort</span>
+              <span className="ml-2 text-sm text-gray-700">Aktívny rezort</span>
             </label>
             <p className="mt-1 ml-6 text-xs text-gray-500">
               (i) Neaktívny rezort nemôže vytvárať nové VK

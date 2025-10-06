@@ -160,7 +160,7 @@ export default function NewVKPage() {
           <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 id="page-title" className="text-3xl font-bold text-gray-900">
             Vytvoriť výberové konanie
           </h1>
           <p className="mt-2 text-gray-600">

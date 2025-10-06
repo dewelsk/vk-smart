@@ -65,7 +65,7 @@ export default function UserDetailPage() {
     name: '',
     surname: '',
     email: '',
-    role: roleOptions[0],
+    role: null as RoleOption | null,
     note: '',
     active: true,
     institutionIds: [] as InstitutionOption[],
@@ -84,7 +84,14 @@ export default function UserDetailPage() {
 
       if (data.user) {
         setUser(data.user)
-        const roleOption = roleOptions.find(r => r.value === data.user.role) || roleOptions[0]
+
+        // Find the matching role option, or create a fallback if not found
+        let roleOption = roleOptions.find(r => r.value === data.user.role)
+
+        // If role not found in options, create a custom option with the actual role value
+        if (!roleOption) {
+          roleOption = { value: data.user.role, label: data.user.role }
+        }
         setFormData({
           name: data.user.name,
           surname: data.user.surname,
@@ -140,6 +147,7 @@ export default function UserDetailPage() {
     e.preventDefault()
 
     if (!validate()) return
+    if (!formData.role) return
 
     setSaving(true)
     setErrors({})
@@ -220,21 +228,22 @@ export default function UserDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="user-detail-page">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
             href="/users"
+            data-testid="back-button"
             className="p-2 hover:bg-gray-100 rounded-md transition-colors"
           >
             <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 data-testid="user-name" className="text-3xl font-bold text-gray-900">
               {user.name} {user.surname}
             </h1>
-            <p className="mt-2 text-gray-600">
+            <p data-testid="user-subtitle" className="mt-2 text-gray-600">
               {user.username} • {user.role}
             </p>
           </div>
@@ -371,16 +380,19 @@ export default function UserDetailPage() {
           </div>
 
           {/* Role */}
-          <div>
+          <div data-testid="role-field">
             <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
               Rola
             </label>
             <Select
+              inputId="role-select"
               value={formData.role}
-              onChange={(selected) => setFormData({ ...formData, role: selected as RoleOption })}
+              onChange={(selected) => setFormData({ ...formData, role: selected })}
               options={roleOptions}
               className="basic-select"
               classNamePrefix="select"
+              isLoading={!formData.role}
+              placeholder={!formData.role ? "Načítavam..." : "Vyberte rolu"}
             />
           </div>
 

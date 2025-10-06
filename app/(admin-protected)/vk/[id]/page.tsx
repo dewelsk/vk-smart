@@ -16,6 +16,7 @@ import {
 import { ValidationStatusCard } from '@/components/vk/ValidationStatusCard'
 import { AddCommissionMemberModal } from '@/components/vk/AddCommissionMemberModal'
 import { GestorSelectModal } from '@/components/vk/GestorSelectModal'
+import { AddCandidateModal } from '@/components/vk/AddCandidateModal'
 import { DataTable } from '@/components/table/DataTable'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { ValidationIssue } from '@/lib/vk-validation'
@@ -55,6 +56,13 @@ type VK = {
     id: string
     cisIdentifier: string
     isArchived: boolean
+    email: string | null
+    registeredAt: string
+    user: {
+      id: string
+      name: string
+      surname: string
+    }
   }>
   assignedTests: Array<{
     id: string
@@ -94,7 +102,7 @@ type ValidationData = {
   isReady: boolean
 }
 
-type TabType = 'overview' | 'commission'
+type TabType = 'overview' | 'commission' | 'candidates'
 
 export default function VKDetailPage() {
   const router = useRouter()
@@ -110,7 +118,7 @@ export default function VKDetailPage() {
   // Read active tab from URL
   useEffect(() => {
     const tab = searchParams.get('tab') as TabType
-    if (tab && ['overview', 'commission'].includes(tab)) {
+    if (tab && ['overview', 'commission', 'candidates'].includes(tab)) {
       setActiveTab(tab)
     }
   }, [searchParams])
@@ -181,7 +189,7 @@ export default function VKDetailPage() {
           <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-3xl font-bold text-gray-900">{vk.identifier}</h1>
+          <h1 id="vk-detail-title" className="text-3xl font-bold text-gray-900">{vk.identifier}</h1>
           <p className="mt-1 text-gray-600">{vk.position}</p>
         </div>
         <StatusBadge status={vk.status} />
@@ -216,6 +224,7 @@ export default function VKDetailPage() {
               Prehľad
             </button>
             <button
+              id="commission-tab"
               onClick={() => changeTab('commission')}
               className={`
                 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
@@ -228,12 +237,27 @@ export default function VKDetailPage() {
               <UserGroupIcon className="h-5 w-5 inline-block mr-2" />
               Komisia
             </button>
+            <button
+              id="candidates-tab"
+              onClick={() => changeTab('candidates')}
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
+                ${activeTab === 'candidates'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+            >
+              <UserPlusIcon className="h-5 w-5 inline-block mr-2" />
+              Uchádzači
+            </button>
           </nav>
         </div>
 
         <div className="p-6">
           {activeTab === 'overview' && <OverviewTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
           {activeTab === 'commission' && <CommissionTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
+          {activeTab === 'candidates' && <CandidatesTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
         </div>
       </div>
     </div>
@@ -426,6 +450,13 @@ function OverviewTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
 
 type CommissionMember = VK['commission']['members'][0]
 
+// Helper function for Slovak declension of "člen/členovia/členov"
+function getMemberCountText(count: number): string {
+  if (count === 1) return `${count} člen`
+  if (count >= 2 && count <= 4) return `${count} členovia`
+  return `${count} členov`
+}
+
 function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -455,21 +486,28 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
 
   async function handleToggleChairman(memberId: string, currentIsChairman: boolean) {
     try {
+      console.log('Toggling chairman:', { memberId, currentIsChairman, newValue: !currentIsChairman })
+
       const res = await fetch(`/api/admin/vk/${vk.id}/commission/members/${memberId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isChairman: !currentIsChairman })
       })
 
+      console.log('Response status:', res.status)
+
       if (res.ok) {
+        const data = await res.json()
+        console.log('Chairman toggled successfully:', data)
         onRefresh()
       } else {
         const data = await res.json()
+        console.error('Failed to toggle chairman:', data)
         alert(data.error || 'Chyba pri zmene predsedu')
       }
     } catch (error) {
       console.error('Error toggling chairman:', error)
-      alert('Chyba pri zmene predsedu')
+      alert('Chyba pri zmene predsedu: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 
@@ -498,7 +536,12 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
     },
     {
       header: 'Predseda',
-      cell: ({ row }) => row.original.isChairman ? <CheckIcon className="h-4 w-4 text-green-600" /> : null,
+      cell: ({ row }) => row.original.isChairman ? (
+        <span data-testid={`chairman-badge-${row.original.userId}`} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+          <CheckIcon className="h-3 w-3" />
+          Predseda
+        </span>
+      ) : null,
     },
     {
       id: 'actions',
@@ -526,10 +569,11 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">
-          Výberová komisia {memberCount > 0 && `(${memberCount} členov)`}
+        <h2 id="commission-title" className="text-lg font-semibold text-gray-900">
+          Výberová komisia {memberCount > 0 && `(${getMemberCountText(memberCount)})`}
         </h2>
         <button
+          id="add-commission-member-btn"
           onClick={() => setAdding(true)}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
@@ -559,8 +603,8 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
             </div>
           )}
           {memberCount > 0 && memberCount % 2 === 1 && chairmen.length === 1 && (
-            <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded">
-              ✅ Komisia je validná ({memberCount} členov, 1 predseda)
+            <div id="commission-valid-message" className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded">
+              ✅ Komisia je validná ({getMemberCountText(memberCount)}, 1 predseda)
             </div>
           )}
         </div>
@@ -587,12 +631,140 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
       )}
 
       {/* Add member modal */}
+      {adding && (() => {
+        const existingMembers = vk.commission?.members.map(m => ({
+          userId: m.userId,
+          isChairman: m.isChairman
+        })) || []
+        console.log('Opening commission modal with existingMembers:', existingMembers)
+        return (
+          <AddCommissionMemberModal
+            vkId={vk.id}
+            onClose={() => setAdding(false)}
+            onSuccess={onRefresh}
+            existingMembers={existingMembers}
+          />
+        )
+      })()}
+    </div>
+  )
+}
+
+type Candidate = VK['candidates'][0]
+
+function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
+  const [adding, setAdding] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  async function handleRemoveCandidate(candidateId: string) {
+    if (!confirm('Naozaj chcete odstrániť uchádzača?')) return
+
+    setDeleting(candidateId)
+    try {
+      const res = await fetch(`/api/admin/vk/${vk.id}/candidates/${candidateId}`, {
+        method: 'DELETE'
+      })
+
+      if (res.ok) {
+        onRefresh()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Chyba pri odstraňovaní uchádzača')
+      }
+    } catch (error) {
+      console.error('Error removing candidate:', error)
+      alert('Chyba pri odstraňovaní uchádzača')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  const activeCandidates = vk.candidates.filter(c => !c.isArchived)
+  const archivedCandidates = vk.candidates.filter(c => c.isArchived)
+
+  const columns: ColumnDef<Candidate>[] = [
+    {
+      header: 'Meno',
+      cell: ({ row }) => (
+        <div>
+          <p className="font-medium text-gray-900">
+            {row.original.user.name} {row.original.user.surname}
+          </p>
+          {row.original.isArchived && (
+            <span className="text-xs text-gray-500">(archivovaný)</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: 'Email',
+      accessorFn: (row) => row.email || '-',
+    },
+    {
+      header: 'CIS identifikátor',
+      accessorFn: (row) => row.cisIdentifier,
+    },
+    {
+      header: 'Registrovaný',
+      cell: ({ row }) => new Date(row.original.registeredAt).toLocaleDateString('sk-SK'),
+    },
+    {
+      id: 'actions',
+      header: 'Akcie',
+      cell: ({ row }) => (
+        <div className="space-x-2">
+          <button
+            onClick={() => handleRemoveCandidate(row.original.id)}
+            disabled={deleting === row.original.id}
+            className="text-red-600 hover:text-red-900 text-sm disabled:opacity-50"
+          >
+            {deleting === row.original.id ? 'Odstraňujem...' : 'Odstrániť'}
+          </button>
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900">
+          Uchádzači ({activeCandidates.length})
+          {archivedCandidates.length > 0 && ` • ${archivedCandidates.length} archivovaných`}
+        </h2>
+        <button
+          onClick={() => setAdding(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        >
+          + Pridať uchádzača
+        </button>
+      </div>
+
+      {activeCandidates.length > 0 ? (
+        <DataTable
+          columns={columns}
+          data={activeCandidates}
+          pagination={activeCandidates.length > 10}
+          pageSize={10}
+        />
+      ) : (
+        <div className="text-center py-12 bg-gray-50 rounded-lg">
+          <p className="text-gray-500 mb-4">Žiadni uchádzači</p>
+          <button
+            onClick={() => setAdding(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            + Pridať prvého uchádzača
+          </button>
+        </div>
+      )}
+
+      {/* Add candidate modal */}
       {adding && (
-        <AddCommissionMemberModal
+        <AddCandidateModal
           vkId={vk.id}
           onClose={() => setAdding(false)}
           onSuccess={onRefresh}
-          existingMemberIds={vk.commission?.members.map(m => m.userId) || []}
         />
       )}
     </div>

@@ -1,28 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-
-type User = {
-  id: string
-  name: string
-  surname: string
-  email: string | null
-  username: string
-  active: boolean
-  lastLoginAt: string | null
-}
+import { ArrowLeftIcon } from '@heroicons/react/24/outline'
+import { DataTable } from '@/components/table/DataTable'
+import type { ColumnDef } from '@tanstack/react-table'
 
 type VK = {
   id: string
   identifier: string
   position: string
-  selectionType: string
-  organizationalUnit: string
   status: string
-  date: string
   institution: {
     id: string
     code: string
@@ -30,158 +19,134 @@ type VK = {
   }
 }
 
-type TestResult = {
-  id: string
-  testId: string
-  testName: string
-  score: number
-  maxScore: number
-  passed: boolean
-  completedAt: string
-}
-
-type Document = {
-  id: string
-  type: string
-  filename: string
-  uploadedAt: string
-}
-
-type Evaluation = {
-  id: string
-  totalScore: number
-  maxScore: number
-  successRate: number
-  finalized: boolean
-  finalizedAt: string | null
-  user: {
-    id: string
-    name: string
-    surname: string
-  }
-  createdAt: string
-}
-
-type Applicant = {
+type Candidate = {
   id: string
   cisIdentifier: string
   email: string | null
   isArchived: boolean
   registeredAt: string
-  user: User
   vk: VK
-  testResults: TestResult[]
-  documents: Document[]
-  evaluations: Evaluation[]
+  testResults: any[]
+  evaluations: any[]
 }
 
-export default function ApplicantDetailPage() {
-  const router = useRouter()
-  const params = useParams()
-  const applicantId = params.id as string
+type User = {
+  id: string
+  username: string
+  email: string | null
+  name: string
+  surname: string
+  role: string
+  active: boolean
+  createdAt: string
+  updatedAt: string
+  candidates: Candidate[]
+}
 
+type TabType = 'overview' | 'vk'
+
+export default function ApplicantDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [applicant, setApplicant] = useState<Applicant | null>(null)
-  const [formData, setFormData] = useState({
-    email: '',
-    isArchived: false,
-  })
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [activeTab, setActiveTab] = useState<TabType>('overview')
 
   useEffect(() => {
-    fetchApplicant()
-  }, [applicantId])
+    fetchUser()
+  }, [params.id])
 
-  async function fetchApplicant() {
+  async function fetchUser() {
     try {
-      const res = await fetch(`/api/admin/applicants/${applicantId}`)
+      const res = await fetch(`/api/admin/users/${params.id}`)
+      if (!res.ok) throw new Error('Failed to fetch user')
       const data = await res.json()
-
-      if (data.applicant) {
-        setApplicant(data.applicant)
-        setFormData({
-          email: data.applicant.email || '',
-          isArchived: data.applicant.isArchived,
-        })
-      }
+      setUser(data.user)
     } catch (error) {
-      console.error('Failed to fetch applicant:', error)
+      console.error('Error fetching user:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
-    setSaving(true)
-    setErrors({})
-
-    try {
-      const res = await fetch(`/api/admin/applicants/${applicantId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: formData.email || null,
-          isArchived: formData.isArchived,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setErrors({ general: data.error || 'Chyba pri aktualizácii uchádzača' })
-        return
-      }
-
-      // Success - refresh data
-      await fetchApplicant()
-    } catch (error) {
-      console.error('Failed to update applicant:', error)
-      setErrors({ general: 'Chyba pri aktualizácii uchádzača' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!confirm('Naozaj chcete odstrániť tohto uchádzača?')) return
-
-    try {
-      const res = await fetch(`/api/admin/applicants/${applicantId}`, {
-        method: 'DELETE',
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        alert(data.error || 'Chyba pri odstraňovaní uchádzača')
-        return
-      }
-
-      // Success - redirect to list
-      router.push('/applicants')
-    } catch (error) {
-      console.error('Failed to delete applicant:', error)
-      alert('Chyba pri odstraňovaní uchádzača')
-    }
-  }
+  const vkColumns: ColumnDef<Candidate>[] = [
+    {
+      accessorKey: 'vk.identifier',
+      header: 'VK',
+      cell: ({ row }) => (
+        <Link
+          href={`/vk/${row.original.vk.id}`}
+          className="text-blue-600 hover:text-blue-800 font-medium"
+        >
+          {row.original.vk.identifier}
+        </Link>
+      ),
+    },
+    {
+      accessorKey: 'vk.position',
+      header: 'Pozícia',
+    },
+    {
+      accessorKey: 'vk.institution.name',
+      header: 'Inštitúcia',
+    },
+    {
+      accessorKey: 'cisIdentifier',
+      header: 'CIS ID',
+    },
+    {
+      accessorKey: 'registeredAt',
+      header: 'Registrácia',
+      cell: ({ row }) => new Date(row.original.registeredAt).toLocaleDateString('sk-SK'),
+    },
+    {
+      id: 'testResults',
+      header: 'Testy',
+      cell: ({ row }) => row.original.testResults.length || '-',
+    },
+    {
+      id: 'evaluations',
+      header: 'Hodnotenia',
+      cell: ({ row }) => row.original.evaluations.length || '-',
+    },
+    {
+      accessorKey: 'vk.status',
+      header: 'Stav VK',
+      cell: ({ row }) => {
+        const status = row.original.vk.status
+        const statusMap: Record<string, { label: string; color: string }> = {
+          DRAFT: { label: 'Návrh', color: 'bg-gray-100 text-gray-800' },
+          PUBLISHED: { label: 'Zverejnené', color: 'bg-blue-100 text-blue-800' },
+          IN_PROGRESS: { label: 'Prebieha', color: 'bg-yellow-100 text-yellow-800' },
+          COMPLETED: { label: 'Ukončené', color: 'bg-green-100 text-green-800' },
+          CANCELLED: { label: 'Zrušené', color: 'bg-red-100 text-red-800' },
+        }
+        const statusInfo = statusMap[status] || { label: status, color: 'bg-gray-100 text-gray-800' }
+        return (
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
+            {statusInfo.label}
+          </span>
+        )
+      },
+    },
+  ]
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center h-64">
         <div className="text-gray-500">Načítavam...</div>
       </div>
     )
   }
 
-  if (!applicant) {
+  if (!user) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">Uchádzač nenájdený</p>
-        <Link href="/applicants" className="text-blue-600 hover:text-blue-800 mt-4 inline-block">
+      <div className="flex flex-col items-center justify-center h-64">
+        <div className="text-gray-500 mb-4">Uchádzač nebol nájdený</div>
+        <Link
+          href="/applicants"
+          className="text-blue-600 hover:text-blue-800"
+        >
           Späť na zoznam
         </Link>
       </div>
@@ -189,229 +154,138 @@ export default function ApplicantDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="applicant-detail-page">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
             href="/applicants"
+            data-testid="back-button"
             className="p-2 hover:bg-gray-100 rounded-md transition-colors"
           >
             <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {applicant.user.name} {applicant.user.surname}
+            <h1 data-testid="applicant-name" className="text-3xl font-bold text-gray-900">
+              {user.name} {user.surname}
             </h1>
-            <p className="mt-2 text-gray-600">
-              CIS: {applicant.cisIdentifier} • {applicant.user.username}
-            </p>
+            <p data-testid="applicant-email" className="text-gray-600">{user.email || user.username}</p>
           </div>
         </div>
-        <button
-          onClick={handleDelete}
-          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-        >
-          <TrashIcon className="h-5 w-5" />
-          Odstrániť
-        </button>
-      </div>
-
-      {/* VK Info */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Výberové konanie</h2>
-        <dl className="grid grid-cols-2 gap-4">
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Identifikátor</dt>
-            <dd className="mt-1 text-sm text-gray-900">
-              <Link href={`/vk/${applicant.vk.id}`} className="text-blue-600 hover:text-blue-800">
-                {applicant.vk.identifier}
-              </Link>
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Pozícia</dt>
-            <dd className="mt-1 text-sm text-gray-900">{applicant.vk.position}</dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Rezort</dt>
-            <dd className="mt-1 text-sm text-gray-900">
-              {applicant.vk.institution.code} - {applicant.vk.institution.name}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Stav VK</dt>
-            <dd className="mt-1 text-sm text-gray-900">{applicant.vk.status}</dd>
-          </div>
-        </dl>
-      </div>
-
-      {/* Applicant Info */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Informácie o uchádzačovi</h2>
-        <dl className="grid grid-cols-2 gap-4">
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Registrácia</dt>
-            <dd className="mt-1 text-sm text-gray-900">
-              {new Date(applicant.registeredAt).toLocaleDateString('sk-SK')}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Posledné prihlásenie</dt>
-            <dd className="mt-1 text-sm text-gray-900">
-              {applicant.user.lastLoginAt
-                ? new Date(applicant.user.lastLoginAt).toLocaleDateString('sk-SK')
-                : 'Nikdy'}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Stav účtu</dt>
-            <dd className="mt-1">
-              {applicant.user.active ? (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Aktívny
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                  Neaktívny
-                </span>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Stav uchádzača</dt>
-            <dd className="mt-1">
-              {applicant.isArchived ? (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                  Archivovaný
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Aktívny
-                </span>
-              )}
-            </dd>
-          </div>
-        </dl>
-      </div>
-
-      {/* Test Results */}
-      {applicant.testResults && applicant.testResults.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Výsledky testov ({applicant.testResults.length})
-          </h2>
-          <div className="space-y-3">
-            {applicant.testResults.map((result) => (
-              <div key={result.id} className="flex items-center justify-between border-b pb-3">
-                <div>
-                  <div className="font-medium">{result.testName}</div>
-                  <div className="text-sm text-gray-500">
-                    Dokončené: {new Date(result.completedAt).toLocaleDateString('sk-SK')}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-semibold">
-                    {result.score} / {result.maxScore}
-                  </div>
-                  {result.passed ? (
-                    <span className="text-xs text-green-600">Úspech</span>
-                  ) : (
-                    <span className="text-xs text-red-600">Neúspech</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Evaluations */}
-      {applicant.evaluations && applicant.evaluations.length > 0 && (
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Hodnotenia ({applicant.evaluations.length})
-          </h2>
-          <div className="space-y-3">
-            {applicant.evaluations.map((evaluation) => (
-              <div key={evaluation.id} className="border-b pb-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium">{evaluation.phase}</div>
-                  {evaluation.score !== null && (
-                    <div className="font-semibold">{evaluation.score} bodov</div>
-                  )}
-                </div>
-                {evaluation.notes && (
-                  <div className="text-sm text-gray-600 mb-2">{evaluation.notes}</div>
-                )}
-                <div className="text-xs text-gray-500">
-                  Hodnotil: {evaluation.evaluator.name} {evaluation.evaluator.surname} •{' '}
-                  {new Date(evaluation.evaluatedAt).toLocaleDateString('sk-SK')}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Edit Form */}
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Upraviť uchádzača</h2>
-
-        <div className="space-y-6">
-          {/* General Error */}
-          {errors.general && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {errors.general}
-            </div>
+        <div>
+          {user.active ? (
+            <span data-testid="status-badge" className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+              Aktívny
+            </span>
+          ) : (
+            <span data-testid="status-badge" className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+              Neaktívny
+            </span>
           )}
+        </div>
+      </div>
 
-          {/* Email */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
+      {/* Tabs */}
+      <div className="border-b border-gray-200" data-testid="tabs-container">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            data-testid="overview-tab"
+            onClick={() => setActiveTab('overview')}
+            className={`
+              py-4 px-1 border-b-2 font-medium text-sm
+              ${activeTab === 'overview'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }
+            `}
+          >
+            Prehľad
+          </button>
+          <button
+            data-testid="vk-tab"
+            onClick={() => setActiveTab('vk')}
+            className={`
+              py-4 px-1 border-b-2 font-medium text-sm
+              ${activeTab === 'vk'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }
+            `}
+          >
+            Výberové konania ({user.candidates.length})
+          </button>
+        </nav>
+      </div>
+
+      {/* Content */}
+      {activeTab === 'overview' && (
+        <div data-testid="overview-content" className="bg-white shadow rounded-lg">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 data-testid="overview-title" className="text-lg font-medium text-gray-900">Základné informácie</h2>
           </div>
-
-          {/* Archived */}
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="isArchived"
-              checked={formData.isArchived}
-              onChange={(e) => setFormData({ ...formData, isArchived: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="isArchived" className="ml-2 block text-sm text-gray-700">
-              Archivovať uchádzača
-            </label>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex gap-4 pt-4">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Ukladám...' : 'Uložiť zmeny'}
-            </button>
-            <Link
-              href="/applicants"
-              className="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-            >
-              Zrušiť
-            </Link>
+          <div className="px-6 py-4">
+            <dl className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div data-testid="field-name">
+                <dt className="text-sm font-medium text-gray-500">Meno</dt>
+                <dd className="mt-1 text-sm text-gray-900">{user.name}</dd>
+              </div>
+              <div data-testid="field-surname">
+                <dt className="text-sm font-medium text-gray-500">Priezvisko</dt>
+                <dd className="mt-1 text-sm text-gray-900">{user.surname}</dd>
+              </div>
+              <div data-testid="field-email">
+                <dt className="text-sm font-medium text-gray-500">Email</dt>
+                <dd className="mt-1 text-sm text-gray-900">{user.email || '-'}</dd>
+              </div>
+              <div data-testid="field-username">
+                <dt className="text-sm font-medium text-gray-500">Používateľské meno</dt>
+                <dd className="mt-1 text-sm text-gray-900">{user.username}</dd>
+              </div>
+              <div data-testid="field-role">
+                <dt className="text-sm font-medium text-gray-500">Rola</dt>
+                <dd className="mt-1 text-sm text-gray-900">{user.role}</dd>
+              </div>
+              <div data-testid="field-status">
+                <dt className="text-sm font-medium text-gray-500">Stav</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {user.active ? 'Aktívny' : 'Neaktívny'}
+                </dd>
+              </div>
+              <div data-testid="field-created">
+                <dt className="text-sm font-medium text-gray-500">Vytvorený</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {new Date(user.createdAt).toLocaleDateString('sk-SK')}
+                </dd>
+              </div>
+              <div data-testid="field-updated">
+                <dt className="text-sm font-medium text-gray-500">Aktualizovaný</dt>
+                <dd className="mt-1 text-sm text-gray-900">
+                  {new Date(user.updatedAt).toLocaleDateString('sk-SK')}
+                </dd>
+              </div>
+            </dl>
           </div>
         </div>
-      </form>
+      )}
+
+      {activeTab === 'vk' && (
+        <div data-testid="vk-content" className="bg-white shadow rounded-lg">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 data-testid="vk-title" className="text-lg font-medium text-gray-900">Výberové konania</h2>
+          </div>
+          <div className="p-6">
+            {user.candidates.length === 0 ? (
+              <div data-testid="vk-empty-message" className="text-center py-12 text-gray-500">
+                Uchádzač nie je priradený k žiadnemu výberovému konaniu
+              </div>
+            ) : (
+              <div data-testid="vk-table">
+                <DataTable columns={vkColumns} data={user.candidates} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
