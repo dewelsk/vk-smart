@@ -5,9 +5,9 @@ Tento dokument obsahuje otvorené otázky a diskusné body, ktoré treba vyrieš
 ---
 
 ##
-Moze byt viac gestorov?
+Moze byt viac gestorov vo VK?
 Co sa ma stat, ak chcem vymazat VK ktore skoncilo?
-
+Je CIS ID unikatne na uchadzaca alebo je to identifikator cloveka?
 
 ## Sumarizácia otvorených otázok
 

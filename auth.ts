@@ -2,11 +2,10 @@ import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@auth/prisma-adapter'
-import { PrismaClient, UserRole } from '@prisma/client'
+import { UserRole } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/lib/prisma'
 
 // Login schema validation
 const loginSchema = z.object({
