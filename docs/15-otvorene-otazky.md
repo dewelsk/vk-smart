@@ -8,6 +8,8 @@ Tento dokument obsahuje otvorené otázky a diskusné body, ktoré treba vyrieš
 Moze byt viac gestorov vo VK?
 Co sa ma stat, ak chcem vymazat VK ktore skoncilo?
 Je CIS ID unikatne na uchadzaca alebo je to identifikator cloveka?
+MA VK nejaky datum zaciatku a konca?
+
 
 ## Sumarizácia otvorených otázok
 
@@ -23,6 +25,7 @@ Je CIS ID unikatne na uchadzaca alebo je to identifikator cloveka?
 | 8 | Gestor/Komisia - viazaní na rezort? | ✅ VYRIEŠENÉ (áno, viazaní) | Vysoká |
 | 9 | Reset hesla pre uchádzača | 🔄 ČAKÁ NA ROZHODNUTIE | Stredná |
 | 10 | URL routing - centrálna definícia | 🔄 ČAKÁ NA ROZHODNUTIE | Stredná |
+| 11 | Kategórie testov - globálne vs lokálne | 🔄 ČAKÁ NA ROZHODNUTIE | Nízka |
 
 ---
 
@@ -556,6 +559,98 @@ Navigácia: `/admin/users/new` (viď docs/17-url-routing.md)
 2. **Aký formát?** (Markdown tabuľka / JSON / TypeScript konštanty)
 
 **Odporúčanie:** ÁNO - vytvoriť `docs/17-url-routing.md` (Markdown tabuľka)
+
+---
+
+## 11. Kategórie a typy testov - zdieľanie medzi rezortmi
+
+**Dátum:** 2025-10-06
+
+### Súčasný stav:
+
+**Implementované:**
+- ✅ `TestType` model - editovateľné typy testov (napr. "Štátny jazyk", "Cudzí jazyk")
+- ✅ `TestCategory` model s poľom `typeId` (odkaz na TestType model)
+- ✅ Kategórie obsahujú testy a patria k typom testov
+- ✅ Hierarchia: TestType 1:N TestCategory 1:N Test
+- ✅ Používatelia môžu filtrovať testy podľa kategórií alebo typov
+- ✅ SUPERADMIN môže spravovať typy testov a kategórie cez UI
+
+### Otázka:
+
+**Sú kategórie a typy testov globálne (zdieľané medzi rezortmi) alebo lokálne (každý rezort má svoje)?**
+
+**Možnosť A: Globálne (všetci vidia všetko) ✅ SÚČASNÁ IMPLEMENTÁCIA**
+- Kategórie sú zdieľané medzi všetkými rezortmi
+- SUPERADMIN vytvára kategórie centrálne
+- Všetci vidia všetky kategórie a typy testov
+- **Výhody:**
+  - Jednoduchšie (už implementované)
+  - Jednotná taxonomia testov naprieč celým systémom
+  - Znovupoužiteľnosť testov medzi rezortmi
+- **Nevýhody:**
+  - Rezorty nemôžu mať vlastné špecifické kategórie
+  - Väčší zoznam kategórií na výber
+
+**Možnosť B: Lokálne (každý rezort má svoje)**
+- Pridať `institutionId` do `TestCategory`
+- Admin vytvára kategórie pre svoj rezort
+- Každý rezort má svoje kategórie
+- **Výhody:**
+  - Flexibilita - každý rezort si prispôsobí kategórie
+  - Menší zoznam kategórií pri filtráciach
+- **Nevýhody:**
+  - Komplexnejšie (vyžaduje zmenu schémy)
+  - Duplicita (viacero rezortov vytvorí "Slovenský jazyk A1")
+  - Nemožnosť zdieľať testy medzi rezortmi
+
+**Možnosť C: Hybridné (globálne + lokálne)**
+- SUPERADMIN vytvára globálne kategórie (pre všetkých)
+- Admin môže vytvoriť lokálne kategórie (len pre svoj rezort)
+- **Výhody:**
+  - Flexibilita + jednotnosť
+- **Nevýhody:**
+  - Najkomplexnejšie riešenie
+
+### Budúce rozšírenie:
+
+Ak sa rozhodneme meniť z globálneho na lokálne/hybridné:
+
+```prisma
+model TestCategory {
+  id            String      @id @default(cuid())
+  name          String      @unique
+
+  // Aktuálna implementácia: odkaz na TestType model
+  typeId        String?
+  type          TestType?   @relation(fields: [typeId], references: [id], onDelete: SetNull)
+
+  description   String?
+
+  // Pre lokálne/hybridné riešenie (budúce rozšírenie):
+  institutionId String?                                    // NULL = globálna kategória
+  institution   Institution? @relation(...)
+  isGlobal      Boolean     @default(false)                // TRUE = vytvorená SUPERADMINom
+
+  tests         Test[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([name, institutionId])                          // Unikátny názov v rámci rezortu
+  @@map("test_categories")
+}
+```
+
+### Otázka na rozhodnutie:
+
+**Majú byť kategórie a typy testov globálne alebo lokálne?**
+- A) ✅ Globálne (súčasný stav) - jednoduchšie, centrálna taxonomia
+- B) Lokálne - každý rezort má svoje
+- C) Hybridné - kombinácia oboch
+
+**Odporúčanie:** Možnosť A (globálne) - zatiaľ ponechať súčasný stav. Ak sa v budúcnosti ukáže potreba lokálnych kategórií, možno rozšíriť na hybridné riešenie.
+
+**Status:** 🔄 ČAKÁ NA ROZHODNUTIE
 
 ---
 

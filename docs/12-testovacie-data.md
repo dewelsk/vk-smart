@@ -422,7 +422,25 @@ async function main() {
 
   console.log('✅ Gestor users created');
 
-  // 3. Create VK
+  // 3. Create Test Types and Categories
+  const testType1 = await prisma.testType.create({
+    data: {
+      name: 'Štátny jazyk',
+      description: 'Testy štátneho jazyka',
+    },
+  });
+
+  const category1 = await prisma.testCategory.create({
+    data: {
+      name: 'Slovenský jazyk - A1',
+      typeId: testType1.id,
+      description: 'Základná úroveň',
+    },
+  });
+
+  console.log('✅ Test types and categories created');
+
+  // 4. Create VK
   const vk1 = await prisma.vyberoveKonanie.create({
     data: {
       identifikator: 'VK/2025/0001',
@@ -440,11 +458,12 @@ async function main() {
 
   console.log('✅ VK created');
 
-  // 4. Create Tests
+  // 5. Create Tests
   const test1 = await prisma.test.create({
     data: {
       nazov: 'Odborný test - Medzinárodná spolupráca',
-      typ: TestTyp.ODBORNY,
+      type: TestTyp.ODBORNY,        // Legacy enum (pre spätnokompatibilitu)
+      categoryId: category1.id,     // NOVÁ organizácia
       schvaleny: true,
       otazky: {
         // JSON with questions
@@ -454,7 +473,7 @@ async function main() {
 
   console.log('✅ Tests created');
 
-  // 5. Create Candidates
+  // 6. Create Candidates
   const uchadzac1 = await prisma.user.create({
     data: {
       email: 'uchadzac1@gmail.com',

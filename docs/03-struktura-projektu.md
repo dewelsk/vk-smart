@@ -126,6 +126,14 @@ hackathon-vk/
 │   │   │   │   │   │   └── route.ts  # CSV import
 │   │   │   │   │   └── [id]/
 │   │   │   │   │       └── route.ts
+│   │   │   │   ├── test-types/
+│   │   │   │   │   ├── route.ts       # GET, POST (list, create)
+│   │   │   │   │   └── [id]/
+│   │   │   │   │       └── route.ts   # PUT, DELETE
+│   │   │   │   ├── test-categories/
+│   │   │   │   │   ├── route.ts       # GET, POST
+│   │   │   │   │   └── [id]/
+│   │   │   │   │       └── route.ts   # PUT, DELETE
 │   │   │   │   └── tests/
 │   │   │   │       ├── route.ts
 │   │   │   │       ├── assign/

@@ -286,10 +286,142 @@ Aktualizácia používateľa.
 ### DELETE `/api/admin/users/[id]`
 Deaktivácia používateľa.
 
+## Admin - Typy testov
+
+### GET `/api/admin/test-types`
+Zoznam typov testov.
+
+**Response:**
+```json
+{
+  "testTypes": [
+    {
+      "id": "type_1",
+      "name": "Štátny jazyk",
+      "description": "Testy štátneho jazyka",
+      "categoryCount": 5,
+      "createdAt": "2025-01-01T10:00:00Z",
+      "updatedAt": "2025-01-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+### POST `/api/admin/test-types`
+Vytvorenie nového typu testu.
+
+**Request:**
+```json
+{
+  "name": "Nový typ testu",
+  "description": "Popis typu"
+}
+```
+
+**Response:**
+```json
+{
+  "testType": {
+    "id": "type_1",
+    "name": "Nový typ testu",
+    "description": "Popis typu"
+  }
+}
+```
+
+### PUT `/api/admin/test-types/:id`
+Aktualizácia typu testu.
+
+**Request:**
+```json
+{
+  "name": "Aktualizovaný názov",
+  "description": "Aktualizovaný popis"
+}
+```
+
+### DELETE `/api/admin/test-types/:id`
+Zmazanie typu testu (len ak nemá priradené kategórie).
+
+---
+
+## Admin - Kategórie testov
+
+### GET `/api/admin/test-categories`
+Zoznam kategórií testov.
+
+**Query params:**
+- `typeId?`: Filter podľa typu testu
+- `search?`: Vyhľadávanie v názve
+
+**Response:**
+```json
+{
+  "categories": [
+    {
+      "id": "cat_1",
+      "name": "Slovenský jazyk - A1",
+      "typeId": "type_1",
+      "type": {
+        "id": "type_1",
+        "name": "Štátny jazyk"
+      },
+      "description": "Základná úroveň",
+      "testCount": 3,
+      "createdAt": "2025-01-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+### POST `/api/admin/test-categories`
+Vytvorenie novej kategórie.
+
+**Request:**
+```json
+{
+  "name": "Slovenský jazyk - A1",
+  "typeId": "type_1",
+  "description": "Základná úroveň"
+}
+```
+
+**Response:**
+```json
+{
+  "category": {
+    "id": "cat_1",
+    "name": "Slovenský jazyk - A1",
+    "typeId": "type_1",
+    "description": "Základná úroveň"
+  }
+}
+```
+
+### PUT `/api/admin/test-categories/:id`
+Aktualizácia kategórie.
+
+**Request:**
+```json
+{
+  "name": "Aktualizovaný názov",
+  "typeId": "type_2",
+  "description": "Nový popis"
+}
+```
+
+### DELETE `/api/admin/test-categories/:id`
+Zmazanie kategórie (len ak nemá priradené testy).
+
+---
+
 ## Admin - Testy
 
 ### GET `/api/admin/tests`
 Zoznam testov.
+
+**Query params:**
+- `categoryId?`: Filter podľa kategórie
 
 **Response:**
 ```json
@@ -298,7 +430,12 @@ Zoznam testov.
     {
       "id": "test_1",
       "nazov": "Odborný test - Medzinárodná spolupráca",
-      "typ": "ODBORNY",
+      "type": "ODBORNY",
+      "categoryId": "cat_1",
+      "category": {
+        "id": "cat_1",
+        "name": "Slovenský jazyk - A1"
+      },
       "pocetOtazok": 20,
       "schvaleny": true,
       "autor": {...}
@@ -314,7 +451,8 @@ Vytvorenie testu.
 ```json
 {
   "nazov": "Odborný test - IT",
-  "typ": "ODBORNY",
+  "type": "ODBORNY",
+  "categoryId": "cat_1",
   "popis": "Test pre IT pozície",
   "otazky": [
     {
