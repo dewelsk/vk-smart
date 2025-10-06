@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 
-const prisma = new PrismaClient()
 
 // GET /api/superadmin/institutions - List institutions
 export async function GET(request: NextRequest) {
   try {
     const session = await auth()
 
-    // Check authentication and authorization
+    // Check authentication and authorization - ONLY SUPERADMIN
     if (!session || session.user.role !== 'SUPERADMIN') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
@@ -27,51 +26,48 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const where: any = {}
 
-    // Search filter
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { code: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ]
-    }
-
-    // Active filter
     if (activeParam && activeParam !== 'all') {
       where.active = activeParam === 'true'
     }
 
-    // Count total
+    // Search filter - use generated search columns for diacritic-insensitive search
+    if (search) {
+      // Apply f_unaccent to search term
+      const normalizedSearch = search.toLowerCase()
+
+      where.OR = [
+        { name_search: { contains: normalizedSearch, mode: 'insensitive' } },
+        { code_search: { contains: normalizedSearch, mode: 'insensitive' } },
+        { description_search: { contains: normalizedSearch, mode: 'insensitive' } },
+      ]
+    }
+
     const total = await prisma.institution.count({ where })
 
-    // Calculate pagination
     const skip = (page - 1) * limit
-    const totalPages = Math.ceil(total / limit)
 
-    // Build orderBy
     const orderBy: any = {}
-    if (sortBy === 'vkCount') {
-      // Special case - will be handled with _count
-    } else if (sortBy === 'adminCount') {
-      // Special case - will be handled with _count
+    if (sortBy === 'vkCount' || sortBy === 'adminCount') {
+      orderBy['name'] = sortOrder
     } else {
       orderBy[sortBy] = sortOrder
     }
 
-    // Fetch institutions
     const institutions = await prisma.institution.findMany({
       where,
       skip,
       take: limit,
-      orderBy: orderBy[sortBy] ? orderBy : { name: 'asc' },
+      orderBy,
       include: {
         _count: {
           select: {
-            vyberoveKonania: true,
+            vks: true,
             users: {
               where: {
-                role: {
-                  in: ['ADMIN', 'GESTOR', 'KOMISIA']
+                user: {
+                  role: {
+                    in: ['ADMIN', 'GESTOR', 'KOMISIA']
+                  }
                 }
               }
             }
@@ -79,6 +75,8 @@ export async function GET(request: NextRequest) {
         }
       }
     })
+
+    const totalPages = Math.ceil(total / limit)
 
     // Transform response
     const transformedInstitutions = institutions.map(inst => ({
@@ -88,7 +86,7 @@ export async function GET(request: NextRequest) {
       description: inst.description,
       active: inst.active,
       createdAt: inst.createdAt,
-      vkCount: inst._count.vyberoveKonania,
+      vkCount: inst._count.vks,
       adminCount: inst._count.users
     }))
 
