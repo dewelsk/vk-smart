@@ -27,9 +27,7 @@ export function AddCandidateModal({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
-  const [cisIdentifier, setCisIdentifier] = useState('')
-  const [email, setEmail] = useState('')
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
 
   useEffect(() => {
     fetchAvailableUsers()
@@ -68,9 +66,27 @@ export function AddCandidateModal({
     }
   }
 
+  function toggleUserSelection(userId: string) {
+    setSelectedUserIds(prev => {
+      if (prev.includes(userId)) {
+        return prev.filter(id => id !== userId)
+      } else {
+        return [...prev, userId]
+      }
+    })
+  }
+
+  function selectAll() {
+    setSelectedUserIds(filteredUsers.map(u => u.id))
+  }
+
+  function deselectAll() {
+    setSelectedUserIds([])
+  }
+
   async function handleSave() {
-    if (!selectedUserId || !cisIdentifier.trim()) {
-      alert('Vyberte používateľa a zadajte CIS identifikátor')
+    if (selectedUserIds.length === 0) {
+      alert('Vyberte aspoň jedného uchádzača')
       return
     }
 
@@ -80,22 +96,22 @@ export function AddCandidateModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: selectedUserId,
-          cisIdentifier: cisIdentifier.trim(),
-          email: email.trim() || null
+          userIds: selectedUserIds
         })
       })
 
       if (res.ok) {
+        const data = await res.json()
+        alert(`Úspešne pridaných ${data.count} uchádzačov`)
         onSuccess()
         onClose()
       } else {
         const data = await res.json()
-        alert(data.error || 'Chyba pri pridávaní uchádzača')
+        alert(data.error || 'Chyba pri pridávaní uchádzačov')
       }
     } catch (error) {
-      console.error('Error adding candidate:', error)
-      alert('Chyba pri pridávaní uchádzača')
+      console.error('Error adding candidates:', error)
+      alert('Chyba pri pridávaní uchádzačov')
     } finally {
       setSaving(false)
     }
@@ -151,24 +167,41 @@ export function AddCandidateModal({
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Vyberte používateľa
-                </label>
-                <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-64 overflow-y-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Vyberte uchádzačov ({selectedUserIds.length} vybraných)
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAll}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Vybrať všetkých
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      type="button"
+                      onClick={deselectAll}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Zrušiť výber
+                    </button>
+                  </div>
+                </div>
+                <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-96 overflow-y-auto">
                   {filteredUsers.map((user) => (
                     <label
                       key={user.id}
                       className={`flex items-center p-3 hover:bg-gray-50 cursor-pointer ${
-                        user.id === selectedUserId ? 'bg-blue-50' : ''
+                        selectedUserIds.includes(user.id) ? 'bg-blue-50' : ''
                       }`}
                     >
                       <input
-                        type="radio"
-                        name="userId"
-                        value={user.id}
-                        checked={selectedUserId === user.id}
-                        onChange={() => setSelectedUserId(user.id)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                        type="checkbox"
+                        checked={selectedUserIds.includes(user.id)}
+                        onChange={() => toggleUserSelection(user.id)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                       />
                       <div className="ml-3 flex-1">
                         <p className="text-sm font-medium text-gray-900">
@@ -183,35 +216,13 @@ export function AddCandidateModal({
                 </div>
               </div>
 
-              {/* CIS Identifier Input */}
-              <div>
-                <label htmlFor="cisIdentifier" className="block text-sm font-medium text-gray-700 mb-2">
-                  CIS identifikátor <span className="text-red-500">*</span>
-                </label>
-                <input
-                  id="cisIdentifier"
-                  type="text"
-                  value={cisIdentifier}
-                  onChange={(e) => setCisIdentifier(e.target.value)}
-                  placeholder="Napr. CIS2024001"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              {/* Email Input (optional) */}
-              <div>
-                <label htmlFor="candidateEmail" className="block text-sm font-medium text-gray-700 mb-2">
-                  Email (voliteľný)
-                </label>
-                <input
-                  id="candidateEmail"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="email@example.com"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
+              {selectedUserIds.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    <strong>Poznámka:</strong> CIS identifikátory budú automaticky vygenerované pri pridaní uchádzačov.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -226,10 +237,10 @@ export function AddCandidateModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={!selectedUserId || !cisIdentifier.trim() || saving}
+            disabled={selectedUserIds.length === 0 || saving}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? 'Ukladám...' : 'Pridať'}
+            {saving ? 'Ukladám...' : `Pridať (${selectedUserIds.length})`}
           </button>
         </div>
       </div>

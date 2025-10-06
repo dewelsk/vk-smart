@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 
-// POST /api/admin/vk/:id/candidates - Add candidate to VK
+// POST /api/admin/vk/:id/candidates - Add candidates to VK (supports bulk add)
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -17,11 +17,14 @@ export async function POST(
 
     const vkId = params.id
     const body = await request.json()
-    const { userId, cisIdentifier, email } = body
+    const { userIds } = body
 
-    if (!userId || !cisIdentifier) {
+    // Support both single userId and array of userIds
+    const userIdArray = Array.isArray(userIds) ? userIds : (body.userId ? [body.userId] : [])
+
+    if (!userIdArray || userIdArray.length === 0) {
       return NextResponse.json(
-        { error: 'userId and cisIdentifier are required' },
+        { error: 'At least one userId is required' },
         { status: 400 }
       )
     }
@@ -48,68 +51,62 @@ export async function POST(
       }
     }
 
-    // Validate user exists and has role UCHADZAC
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
-
-    if (user.role !== 'UCHADZAC') {
-      return NextResponse.json(
-        { error: 'User must have role UCHADZAC' },
-        { status: 400 }
-      )
-    }
-
-    if (!user.active || user.deleted) {
-      return NextResponse.json(
-        { error: 'User must be active' },
-        { status: 400 }
-      )
-    }
-
-    // Check if candidate already exists
-    const existingCandidate = await prisma.candidate.findFirst({
+    // Validate all users exist and have role UCHADZAC
+    const users = await prisma.user.findMany({
       where: {
-        vkId,
-        userId,
+        id: { in: userIdArray },
+        role: 'UCHADZAC',
+        active: true,
         deleted: false
       }
     })
 
-    if (existingCandidate) {
+    if (users.length !== userIdArray.length) {
       return NextResponse.json(
-        { error: 'User is already a candidate in this VK' },
+        { error: 'Some users not found or are not valid UCHADZAC users' },
         { status: 400 }
       )
     }
 
-    // Check if cisIdentifier is unique for this VK
-    const existingCisId = await prisma.candidate.findFirst({
+    // Check for existing candidates
+    const existingCandidates = await prisma.candidate.findMany({
       where: {
         vkId,
-        cisIdentifier,
+        userId: { in: userIdArray },
         deleted: false
       }
     })
 
-    if (existingCisId) {
+    if (existingCandidates.length > 0) {
+      const existingUserIds = existingCandidates.map(c => c.userId)
+      const existingUsers = users.filter(u => existingUserIds.includes(u.id))
+      const names = existingUsers.map(u => `${u.name} ${u.surname}`).join(', ')
+
       return NextResponse.json(
-        { error: 'CIS identifier already exists in this VK' },
+        { error: `Nasledujúci uchádzači už sú pridaní do tohto VK: ${names}` },
         { status: 400 }
       )
     }
 
-    // Create candidate
-    const candidate = await prisma.candidate.create({
-      data: {
+    // Generate CIS identifiers and create candidates
+    const timestamp = Date.now()
+    const candidatesData = userIdArray.map((userId, index) => ({
+      vkId,
+      userId,
+      cisIdentifier: `CIS${timestamp + index}`,
+      email: null
+    }))
+
+    // Bulk insert candidates
+    await prisma.candidate.createMany({
+      data: candidatesData
+    })
+
+    // Fetch created candidates with user data
+    const createdCandidates = await prisma.candidate.findMany({
+      where: {
         vkId,
-        userId,
-        cisIdentifier,
-        email: email || null
+        userId: { in: userIdArray }
       },
       include: {
         user: {
@@ -125,20 +122,21 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      candidate: {
-        id: candidate.id,
-        cisIdentifier: candidate.cisIdentifier,
-        email: candidate.email,
-        registeredAt: candidate.registeredAt,
-        isArchived: candidate.isArchived,
-        user: candidate.user
-      }
+      count: createdCandidates.length,
+      candidates: createdCandidates.map(c => ({
+        id: c.id,
+        cisIdentifier: c.cisIdentifier,
+        email: c.email,
+        registeredAt: c.registeredAt,
+        isArchived: c.isArchived,
+        user: c.user
+      }))
     }, { status: 201 })
 
   } catch (error) {
-    console.error('Error adding candidate:', error)
+    console.error('Error adding candidates:', error)
     return NextResponse.json(
-      { error: 'Failed to add candidate' },
+      { error: 'Failed to add candidates' },
       { status: 500 }
     )
   }
