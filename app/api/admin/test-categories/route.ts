@@ -6,7 +6,7 @@ import { z } from 'zod'
 const createTestCategorySchema = z.object({
   name: z.string().min(1, 'Názov je povinný'),
   typeId: z.string().min(1, 'Typ testu je povinný'),
-  description: z.string().optional(),
+  description: z.string().nullish(), // Accept null, undefined, or string
 })
 
 // GET /api/admin/test-categories - Get list of test categories

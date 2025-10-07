@@ -1,0 +1,71 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e5]:
+        - heading "VK Smart" [level=1] [ref=e7]
+        - generic [ref=e8]:
+          - generic [ref=e9]:
+            - paragraph [ref=e10]: Martin
+            - paragraph [ref=e11]: ADMIN
+          - button "Odhlásiť sa" [ref=e12] [cursor=pointer]:
+            - img [ref=e13] [cursor=pointer]
+            - text: Odhlásiť sa
+    - complementary [ref=e15]:
+      - navigation [ref=e16]:
+        - link "Dashboard" [ref=e17] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e18] [cursor=pointer]
+          - text: Dashboard
+        - link "Výberové konania" [ref=e20] [cursor=pointer]:
+          - /url: /vk
+          - img [ref=e21] [cursor=pointer]
+          - text: Výberové konania
+        - link "Používatelia" [ref=e23] [cursor=pointer]:
+          - /url: /users
+          - img [ref=e24] [cursor=pointer]
+          - text: Používatelia
+        - link "Uchádzači" [ref=e26] [cursor=pointer]:
+          - /url: /applicants
+          - img [ref=e27] [cursor=pointer]
+          - text: Uchádzači
+        - button "Testy" [ref=e30] [cursor=pointer]:
+          - generic [ref=e31] [cursor=pointer]:
+            - img [ref=e32] [cursor=pointer]
+            - text: Testy
+          - img [ref=e34] [cursor=pointer]
+    - main [ref=e36]:
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - heading "Správa rezortov" [level=1] [ref=e40]
+            - paragraph [ref=e41]: Zoznam organizačných jednotiek
+          - link "Pridať rezort" [ref=e42] [cursor=pointer]:
+            - /url: /institutions/new
+            - img [ref=e43] [cursor=pointer]
+            - text: Pridať rezort
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - img [ref=e48]
+            - textbox "Hľadať..." [ref=e50]
+          - generic [ref=e51]:
+            - generic [ref=e52]:
+              - checkbox "Aktívne" [checked] [ref=e53]
+              - generic [ref=e54]: Aktívne
+            - generic [ref=e55]:
+              - checkbox "Neaktívne" [ref=e56]
+              - generic [ref=e57]: Neaktívne
+        - generic [ref=e58]:
+          - paragraph [ref=e59]: Žiadne rezorty
+          - link "Pridať prvý rezort" [ref=e60] [cursor=pointer]:
+            - /url: /institutions/new
+            - img [ref=e61] [cursor=pointer]
+            - text: Pridať prvý rezort
+  - generic [ref=e63]:
+    - img [ref=e65]
+    - button "Open Tanstack query devtools" [ref=e113] [cursor=pointer]:
+      - img [ref=e114] [cursor=pointer]
+  - alert [ref=e162]
+```

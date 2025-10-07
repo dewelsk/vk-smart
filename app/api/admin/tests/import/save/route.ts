@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, categoryId, duration, difficulty, totalPoints, questions } = body
+    const { name, categoryId, duration, difficulty, totalPoints, questions, allowedQuestionTypes } = body
 
     // Validate inputs
     if (!name?.trim()) {
@@ -24,6 +24,23 @@ export async function POST(request: NextRequest) {
     if (!categoryId) {
       return NextResponse.json(
         { error: 'Kategória je povinná' },
+        { status: 400 }
+      )
+    }
+
+    // Validate allowedQuestionTypes
+    if (!allowedQuestionTypes || !Array.isArray(allowedQuestionTypes) || allowedQuestionTypes.length === 0) {
+      return NextResponse.json(
+        { error: 'Aspoň jeden typ otázky musí byť vybraný' },
+        { status: 400 }
+      )
+    }
+
+    const validQuestionTypes = ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'OPEN_ENDED']
+    const invalidTypes = allowedQuestionTypes.filter(type => !validQuestionTypes.includes(type))
+    if (invalidTypes.length > 0) {
+      return NextResponse.json(
+        { error: `Neplatné typy otázok: ${invalidTypes.join(', ')}` },
         { status: 400 }
       )
     }
@@ -117,6 +134,7 @@ export async function POST(request: NextRequest) {
         approved: false, // Draft by default
         authorId: session.user.id,
         questions: questions, // Store as JSON
+        allowedQuestionTypes: allowedQuestionTypes, // Store allowed question types
       },
     })
 

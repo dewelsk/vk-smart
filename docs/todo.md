@@ -27,3 +27,8 @@ VK
 V zadani sa pise, ze nechcu import z Wordu, co je blbost. 
 
 Umoznit spustit test nanecisto. Otestovat si, co som vlastne vytvoril.
+
+##
+Rezorty
+
+Nefunguje editacia rezortu

@@ -54,7 +54,8 @@ export default function ImportTestsPage() {
   const [editingQuestion, setEditingQuestion] = useState<ParsedQuestion | null>(null)
   const [pointsPerQuestion, setPointsPerQuestion] = useState(1)
   const [questionToDelete, setQuestionToDelete] = useState<ParsedQuestion | null>(null)
-  const [errors, setErrors] = useState<{ testName?: string; categoryId?: string }>({})
+  const [allowedQuestionTypes, setAllowedQuestionTypes] = useState<string[]>(['SINGLE_CHOICE'])
+  const [errors, setErrors] = useState<{ testName?: string; categoryId?: string; allowedQuestionTypes?: string }>({})
   const [saving, setSaving] = useState(false)
 
   // Refs pre auto-scroll
@@ -216,6 +217,10 @@ export default function ImportTestsPage() {
       newErrors.categoryId = 'Kategória je povinná'
     }
 
+    if (allowedQuestionTypes.length === 0) {
+      newErrors.allowedQuestionTypes = 'Aspoň jeden typ otázky musí byť vybraný'
+    }
+
     setErrors(newErrors)
 
     // Scroll na prvý error
@@ -250,6 +255,7 @@ export default function ImportTestsPage() {
         duration,
         difficulty,
         totalPoints: parsedTest.totalQuestions * pointsPerQuestion,
+        allowedQuestionTypes,
         questions: parsedTest.questions.map(q => ({
           ...q,
           points: pointsPerQuestion,
@@ -518,6 +524,64 @@ export default function ImportTestsPage() {
                   readOnly
                   className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600 cursor-not-allowed"
                 />
+              </div>
+
+              {/* Allowed Question Types */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Povolené typy otázok *
+                </label>
+                <div
+                  data-testid="question-types-group"
+                  data-error={!!errors.allowedQuestionTypes}
+                  className={`
+                    border rounded-md p-4 space-y-3
+                    ${errors.allowedQuestionTypes ? 'border-red-500' : 'border-gray-300'}
+                  `}
+                >
+                  {[
+                    { value: 'SINGLE_CHOICE', label: 'Jednovýberová' },
+                    { value: 'MULTIPLE_CHOICE', label: 'Viacvýberová' },
+                    { value: 'TRUE_FALSE', label: 'Pravda/Nepravda' },
+                    { value: 'OPEN_ENDED', label: 'Otvorená' },
+                  ].map((option) => (
+                    <div key={option.value} className="flex items-center">
+                      <input
+                        id={`type-${option.value}`}
+                        data-testid={`question-type-${option.value.toLowerCase()}`}
+                        type="checkbox"
+                        checked={allowedQuestionTypes.includes(option.value)}
+                        onChange={() => {
+                          if (allowedQuestionTypes.includes(option.value)) {
+                            // Don't allow unchecking if it's the last one
+                            if (allowedQuestionTypes.length === 1) {
+                              return
+                            }
+                            setAllowedQuestionTypes(allowedQuestionTypes.filter(t => t !== option.value))
+                          } else {
+                            setAllowedQuestionTypes([...allowedQuestionTypes, option.value])
+                          }
+                          if (errors.allowedQuestionTypes) {
+                            setErrors({ ...errors, allowedQuestionTypes: undefined })
+                          }
+                        }}
+                        disabled={allowedQuestionTypes.includes(option.value) && allowedQuestionTypes.length === 1}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
+                      />
+                      <label htmlFor={`type-${option.value}`} className="ml-2 block text-sm text-gray-900">
+                        {option.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                {errors.allowedQuestionTypes && (
+                  <p className="mt-2 text-sm text-red-600" data-testid="question-types-error">
+                    {errors.allowedQuestionTypes}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-gray-500">
+                  Aspoň jeden typ musí byť vybraný. Tieto typy budú dostupné pre otázky v tomto teste.
+                </p>
               </div>
             </div>
 

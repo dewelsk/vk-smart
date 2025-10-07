@@ -2,6 +2,8 @@
 
 Tento súbor obsahuje pravidlá a formulácie, ktoré pomáhajú dosiahnuť konzistentný a kvalitný kód podľa `CLAUDE.md`.
 
+Najlepšie riešenie: Keď mi zadávate formulár/validáciu, pridajte vetu: "Použi TodoWrite na checklist z CLAUDE.md" - to ma donutí si pravidlá pripomenúť PRED implementáciou.
+
 ---
 
 ## 🎯 Základné pravidlo

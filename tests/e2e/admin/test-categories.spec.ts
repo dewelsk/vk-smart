@@ -122,6 +122,38 @@ test.describe('Test Categories Management @admin @test-categories', () => {
       await expect(page.locator(`tr:has-text("${categoryName}")`)).not.toBeVisible()
     })
 
+    test('should create category with name and type only', async ({ page }) => {
+      const timestamp = Date.now()
+      const categoryName = `E2E Category ${timestamp}`
+
+      await page.click('button:has-text("Pridať kategóriu")')
+
+      // Fill name using data-testid
+      await page.getByTestId('category-name-input').fill(categoryName)
+
+      // Select test type - use the stable inputId
+      const selectInput = page.locator('#category-type-select-input')
+      await selectInput.click({ force: true })
+
+      // Wait for options to appear and click first one
+      await page.waitForTimeout(500)
+      const firstOption = page.locator('[id^="react-select"][id$="-option-0"]').first()
+      await firstOption.click({ force: true })
+
+      // Do NOT fill description - test with null/empty
+
+      await page.click('button:has-text("Uložiť kategóriu")')
+
+      // Wait for success - check that modal closes and category appears in table
+      await page.waitForTimeout(1000)
+
+      // Modal should be closed
+      await expect(page.locator('h3:has-text("Pridať kategóriu")')).not.toBeVisible()
+
+      // Category should appear in table
+      await expect(page.locator(`tr:has-text("${categoryName}")`)).toBeVisible()
+    })
+
     test('should create category with all fields', async ({ page }) => {
       const timestamp = Date.now()
       const categoryName = `E2E Full Category ${timestamp}`

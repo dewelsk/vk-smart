@@ -161,6 +161,9 @@ model Test {
 
   questions     Json
 
+  // Allowed question types for this test (must be subset of institution's allowed types)
+  allowedQuestionTypes Json? @default("[\"SINGLE_CHOICE\"]")
+
   recommendedQuestionCount  Int?
   recommendedDuration       Int?
   recommendedScore          Float?
