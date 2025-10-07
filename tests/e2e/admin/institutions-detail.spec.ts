@@ -78,23 +78,35 @@ test.describe('Institution Detail Page @admin @institutions-detail', () => {
 
       await expect(page.getByTestId('institution-detail-page')).toBeVisible({ timeout: 10000 })
 
-      // Uncheck all except SINGLE_CHOICE first
+      // Uncheck all except SINGLE_CHOICE first by clicking
       const multipleChoice = page.getByTestId('question-type-multiple_choice')
       const trueFalse = page.getByTestId('question-type-true_false')
       const openEnded = page.getByTestId('question-type-open_ended')
 
-      if (await multipleChoice.isChecked()) await multipleChoice.uncheck()
-      if (await trueFalse.isChecked()) await trueFalse.uncheck()
-      if (await openEnded.isChecked()) await openEnded.uncheck()
+      // Click to uncheck if checked (instead of .uncheck())
+      if (await multipleChoice.isChecked()) {
+        await multipleChoice.click()
+        await page.waitForTimeout(100)
+      }
+      if (await trueFalse.isChecked()) {
+        await trueFalse.click()
+        await page.waitForTimeout(100)
+      }
+      if (await openEnded.isChecked()) {
+        await openEnded.click()
+        await page.waitForTimeout(100)
+      }
 
       // Save with only SINGLE_CHOICE
       await page.getByTestId('save-button').click()
       await expect(page.locator('text=Inštitúcia bola úspešne aktualizovaná')).toBeVisible({ timeout: 5000 })
 
-      // Now add TRUE_FALSE and OPEN_ENDED
+      // Now add TRUE_FALSE and OPEN_ENDED by clicking unchecked checkboxes
       await page.waitForTimeout(500)
-      await trueFalse.check()
-      await openEnded.check()
+      await trueFalse.click()
+      await page.waitForTimeout(100)
+      await openEnded.click()
+      await page.waitForTimeout(500)
 
       // Save
       await page.getByTestId('save-button').click()
@@ -121,19 +133,29 @@ test.describe('Institution Detail Page @admin @institutions-detail', () => {
       const trueFalse = page.getByTestId('question-type-true_false')
       const openEnded = page.getByTestId('question-type-open_ended')
 
-      await singleChoice.check()
-      await multipleChoice.check()
-      await trueFalse.check()
-      await openEnded.check()
+      // Click to check all if not already checked
+      if (!(await singleChoice.isChecked())) await singleChoice.click()
+      await page.waitForTimeout(100)
+      if (!(await multipleChoice.isChecked())) await multipleChoice.click()
+      await page.waitForTimeout(100)
+      if (!(await trueFalse.isChecked())) await trueFalse.click()
+      await page.waitForTimeout(100)
+      if (!(await openEnded.isChecked())) await openEnded.click()
+      await page.waitForTimeout(500)
 
       // Save
       await page.getByTestId('save-button').click()
       await expect(page.locator('text=Inštitúcia bola úspešne aktualizovaná')).toBeVisible({ timeout: 5000 })
 
-      // Now uncheck some
-      await page.waitForTimeout(500)
-      await multipleChoice.uncheck()
-      await openEnded.uncheck()
+      // Wait for toast to disappear and form to be ready
+      await page.waitForTimeout(2000)
+
+      // Now uncheck some by clicking on checked checkboxes
+      // Click to uncheck (instead of .uncheck())
+      await multipleChoice.click({ force: true })
+      await page.waitForTimeout(200)
+      await openEnded.click({ force: true })
+      await page.waitForTimeout(1000)
 
       // Save
       await page.getByTestId('save-button').click()
@@ -160,10 +182,24 @@ test.describe('Institution Detail Page @admin @institutions-detail', () => {
       const trueFalse = page.getByTestId('question-type-true_false')
       const openEnded = page.getByTestId('question-type-open_ended')
 
-      await singleChoice.check()
-      if (await multipleChoice.isChecked()) await multipleChoice.uncheck()
-      if (await trueFalse.isChecked()) await trueFalse.uncheck()
-      if (await openEnded.isChecked()) await openEnded.uncheck()
+      // Click to check single_choice if not checked
+      if (!(await singleChoice.isChecked())) {
+        await singleChoice.click()
+        await page.waitForTimeout(100)
+      }
+      // Click to uncheck others if checked
+      if (await multipleChoice.isChecked()) {
+        await multipleChoice.click()
+        await page.waitForTimeout(100)
+      }
+      if (await trueFalse.isChecked()) {
+        await trueFalse.click()
+        await page.waitForTimeout(100)
+      }
+      if (await openEnded.isChecked()) {
+        await openEnded.click()
+        await page.waitForTimeout(100)
+      }
 
       // Save
       await page.getByTestId('save-button').click()
@@ -175,7 +211,7 @@ test.describe('Institution Detail Page @admin @institutions-detail', () => {
 
       if (!isDisabled) {
         // Try to uncheck
-        await singleChoice.uncheck()
+        await singleChoice.click()
         // Should still be checked
         await expect(singleChoice).toBeChecked()
       }
@@ -324,7 +360,7 @@ test.describe('Institution Detail Page @admin @institutions-detail', () => {
       // Add TRUE_FALSE if not checked
       const trueFalse = page.getByTestId('question-type-true_false')
       if (!(await trueFalse.isChecked())) {
-        await trueFalse.check()
+        await trueFalse.click()
 
         // Save
         await page.getByTestId('save-button').click()
@@ -393,9 +429,17 @@ test.describe('Institution Detail Page @admin @institutions-detail', () => {
       await expect(page.getByTestId('institution-detail-page')).toBeVisible({ timeout: 10000 })
 
       // Check multiple types
-      await page.getByTestId('question-type-single_choice').check()
-      await page.getByTestId('question-type-multiple_choice').check()
-      await page.getByTestId('question-type-true_false').check()
+      // Click to check if not checked
+      const sc = page.getByTestId('question-type-single_choice')
+      const mc = page.getByTestId('question-type-multiple_choice')
+      const tf = page.getByTestId('question-type-true_false')
+
+      if (!(await sc.isChecked())) await sc.click()
+      await page.waitForTimeout(100)
+      if (!(await mc.isChecked())) await mc.click()
+      await page.waitForTimeout(100)
+      if (!(await tf.isChecked())) await tf.click()
+      await page.waitForTimeout(500)
 
       // Save
       await page.getByTestId('save-button').click()
