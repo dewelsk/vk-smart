@@ -118,6 +118,97 @@ Pri implementácii novej obrazovky:
 - 💥 Zmena textu by rozbila všetky testy
 - ✅ Test IDs sú stabilné a nezávislé od obsahu
 
+### ⚠️ KRITICKÁ POŽIADAVKA: Analýza E2E testov - NIKDY sa nevzdávaj pri prvom zlyhnutí!
+
+**E2E testy sú práve na to, aby odhalili problémy. Nikdy nehovor "test zlyhal kvôli XYZ" bez dôkladnej analýzy!**
+
+#### Postup pri zlyhalom E2E teste:
+
+1. **VŽDY si POZRI SCREENSHOT** z testu
+   - Screenshot je v `test-results/[test-name]/test-failed-1.png`
+   - Ukaž mi ho pomocou Read tool
+   - Analyzuj ČO PRESNE vidí používateľ na obrazovke
+
+2. **ANALYZUJ PRESNÝ ERROR** z Playwright output
+   - Prečítaj celú error message (nie len prvý riadok!)
+   - Zisti KTORÝ element sa nenašiel
+   - Zisti AKÚ hodnotu test očakával vs. čo dostal
+
+3. **SKONTROLUJ SERVER LOGY**
+   - Použi `BashOutput` tool na prečítanie dev server logov
+   - Hľadaj HTTP requests na danú URL
+   - Hľadaj errory v renderovaní stránky
+   - Hľadaj API errory
+
+4. **ZISTI ROOT CAUSE**
+   - Nie je to "problém s databázou" kým to nedokážeš
+   - Nie je to "timeout" kým neanalyzuješ prečo timeout nastal
+   - Nie je to "missing element" kým nezistíš prečo element chýba
+
+5. **OPRAV PROBLÉM A TESTUJ ZNOVA**
+   - Až keď problém opravíš, spusti test znova
+   - Ak test stále zlyháva, OPAKUJ kroky 1-4
+
+#### ❌ ZLE - Predčasná diagnóza
+
+```
+Test zlyhal kvôli timeout.
+```
+
+```
+Element sa nenašiel, pravdepodobne problém s databázou.
+```
+
+```
+E2E testy zlyhali, kód je správny, je to infraštruktúrny problém.
+```
+
+#### ✅ SPRÁVNE - Dôkladná analýza
+
+```
+1. Pozrel som sa na screenshot - zobrazuje sa "Nastala chyba" error page
+2. V server logoch vidím Prisma error "idle timeout"
+3. Ale počkaj - test na /institutions [id] vôbec nebol requestnutý podľa logov
+4. Pozrel som beforeAll() - zlyhalo získanie testInstitutionId
+5. Prečo zlyhalo? Lebo /institutions page vrátil prázdnu tabuľku
+6. Prečo prázdna tabuľka? Skontroloval som DB - je tam 6 inštitúcií
+7. Skontroloval som frontend filter - defaultne filtruje len aktívne
+8. Skontroloval som DB znova - všetky inštitúcie SÚ aktívne
+9. Takže problém NIE je v dátach ani filtroch
+10. Musím pristúpiť na /institutions page priamo a pozrieť sa čo sa deje...
+```
+
+#### Nástroje na diagnostiku
+
+```bash
+# 1. Spusti test s detailným outputom
+npm run test:e2e -- tests/e2e/admin/test.spec.ts --reporter=list
+
+# 2. Pozri sa na screenshot
+Read test-results/[test-name]/test-failed-1.png
+
+# 3. Skontroluj server logy
+BashOutput bash_id
+
+# 4. Testuj priamo v browseri/curl
+curl http://localhost:5600/path
+
+# 5. Skontroluj databázu
+psql "postgresql://..." -c "SELECT * FROM table LIMIT 5;"
+```
+
+#### Prečo je to KRITICKY dôležité?
+
+- ✅ E2E testy odhaľujú **SKUTOČNÉ** problémy v kóde
+- ✅ Screenshot ukazuje **ČO VIDÍ POUŽÍVATEĽ** - najlepší zdroj pravdy
+- ✅ Predčasná diagnóza vedie k **FALOŠNÝM ZÁVEROM**
+- ✅ Dôkladná analýza odhalí **ROOT CAUSE** problému
+- ❌ "Test zlyhal kvôli DB" môže byť **ÚPLNE INÁ** príčina
+- ❌ Bez analýzy screenshotu **NEVIEŠ ČO SA STALO**
+- ❌ Bez server logov **NEVIEŠ AKO SERVER ZAREAGOVAL**
+
+**NIKDY sa nevzdávaj pri prvom zlyhnutí! E2E test je tvoj najlepší priateľ - ukazuje ti ČO NAOZAJ NEFUNGUJE.**
+
 ---
 
 ## Ikony a Emoji
@@ -548,51 +639,130 @@ Pri vytváraní nového formulára:
 
 #### Minimálne požadované testy
 
-1. **Otvorenie modalu/formulára**
-2. **Validácia povinných polí** - test pre každé povinné pole
-3. **Úspešné vytvorenie/úprava** - test s vyplnením všetkých polí
-4. **Zatvorenie modalu/formulára** (cancel)
+Pre každý formulár vytvor nasledujúce testy:
 
-#### Príklad E2E testu pre formulár
+1. **Otvorenie modalu/formulára**
+2. **Validácia povinných polí** - samostatný test pre každé povinné pole
+3. **⚠️ Úspešné vytvorenie len s povinnými poľami** - vyplniť IBA povinné polia, nepovinné ostanú prázdne
+4. **⚠️ Úspešné vytvorenie so všetkými poľami** - vyplniť všetky polia (povinné aj nepovinné)
+5. **Zatvorenie modalu/formulára** (cancel)
+6. **Duplikát** (ak relevantné) - pokus o vytvorenie záznamu s už existujúcim unique poľom
+
+**Prečo sú testy 3 a 4 dôležité?**
+
+Formuláre často zlyhajú keď nepovinné polia ostanú prázdne, pretože:
+- Frontend môže posielať `null` namiesto `undefined`
+- Backend validácia očakáva `optional()` ale dostane `null`
+- Rôzne typy chýb medzi prázdnym stringom `""`, `null`, a `undefined`
+
+**Príklad:**
+- **Povinné polia:** name, typeId
+- **Nepovinné polia:** description
+
+**Test 3** - Len povinné:
+```typescript
+// Vyplní len name a typeId
+// description OSTANE PRÁZDNE (nie je vyplnené)
+```
+
+**Test 4** - Všetky polia:
+```typescript
+// Vyplní name, typeId, aj description
+```
+
+#### Príklad E2E testov pre formulár
+
+**Formulár s poľami:**
+- **Povinné:** name, typeId
+- **Nepovinné:** description
 
 ```typescript
 test.describe('Create Category', () => {
-  test('should validate required fields', async ({ page }) => {
+  // Test 1: Validácia povinného poľa
+  test('should validate required name field', async ({ page }) => {
     await page.click('button:has-text("Pridať kategóriu")')
 
-    // Fill only name (missing required type)
+    // Try to submit without name
+    await page.click('button:has-text("Uložiť kategóriu")')
+
+    // Should show inline error message
+    await expect(page.getByTestId('category-name-error')).toBeVisible()
+    await expect(page.getByTestId('category-name-error')).toHaveText('Názov kategórie je povinný')
+  })
+
+  // Test 2: Validácia ďalšieho povinného poľa
+  test('should validate required type field', async ({ page }) => {
+    await page.click('button:has-text("Pridať kategóriu")')
+
+    // Fill name but not type
     await page.getByTestId('category-name-input').fill('Test Category')
 
     await page.click('button:has-text("Uložiť kategóriu")')
 
-    // Should show inline error message with data-testid
+    // Should show inline error for type
     await expect(page.getByTestId('category-type-error')).toBeVisible()
     await expect(page.getByTestId('category-type-error')).toHaveText('Typ testu je povinný')
   })
 
-  test('should create category successfully', async ({ page }) => {
-    const categoryName = `E2E Test ${Date.now()}`
+  // ⚠️ Test 3: Len POVINNÉ polia (description OSTANE PRÁZDNE)
+  test('should create category with required fields only', async ({ page }) => {
+    const categoryName = `E2E Required Only ${Date.now()}`
 
     await page.click('button:has-text("Pridať kategóriu")')
 
-    // Fill name
+    // Fill ONLY required fields
     await page.getByTestId('category-name-input').fill(categoryName)
 
-    // Select type (react-select with stable inputId)
     const selectInput = page.locator('#category-type-select-input')
     await selectInput.click({ force: true })
     await page.waitForTimeout(500)
     const firstOption = page.locator('[id^="react-select"][id$="-option-0"]').first()
     await firstOption.click({ force: true })
 
+    // DO NOT fill description - leave it empty!
+
     // Submit
     await page.click('button:has-text("Uložiť kategóriu")')
 
-    // Verify modal closed
+    // Verify success
     await expect(page.locator('h3:has-text("Pridať kategóriu")')).not.toBeVisible()
-
-    // Verify item appears in table
     await expect(page.locator(`tr:has-text("${categoryName}")`)).toBeVisible()
+  })
+
+  // ⚠️ Test 4: VŠETKY polia (povinné aj nepovinné)
+  test('should create category with all fields', async ({ page }) => {
+    const categoryName = `E2E All Fields ${Date.now()}`
+    const description = 'This is a test category description'
+
+    await page.click('button:has-text("Pridať kategóriu")')
+
+    // Fill ALL fields (required + optional)
+    await page.getByTestId('category-name-input').fill(categoryName)
+
+    const selectInput = page.locator('#category-type-select-input')
+    await selectInput.click({ force: true })
+    await page.waitForTimeout(500)
+    const firstOption = page.locator('[id^="react-select"][id$="-option-0"]').first()
+    await firstOption.click({ force: true })
+
+    // Fill optional field
+    await page.getByTestId('category-description-input').fill(description)
+
+    // Submit
+    await page.click('button:has-text("Uložiť kategóriu")')
+
+    // Verify success
+    await expect(page.locator('h3:has-text("Pridať kategóriu")')).not.toBeVisible()
+    await expect(page.locator(`tr:has-text("${categoryName}")`)).toBeVisible()
+  })
+
+  // Test 5: Cancel
+  test('should close modal when clicking cancel', async ({ page }) => {
+    await page.click('button:has-text("Pridať kategóriu")')
+    await expect(page.locator('h3:has-text("Pridať kategóriu")')).toBeVisible()
+
+    await page.click('button:has-text("Zrušiť")')
+    await expect(page.locator('h3:has-text("Pridať kategóriu")')).not.toBeVisible()
   })
 })
 ```
@@ -646,12 +816,14 @@ Po vytvorení formulára:
 
 - [ ] Test na otvorenie modalu/formulára
 - [ ] Test pre každé povinné pole (validácia s `data-testid` error)
-- [ ] Test na úspešné vytvorenie/úpravu
+- [ ] **Test na vytvorenie LEN s povinnými poľami** (nepovinné ostanú prázdne)
+- [ ] **Test na vytvorenie so VŠETKÝMI poľami** (povinné aj nepovinné)
 - [ ] Test na zrušenie (cancel button)
 - [ ] Test na duplikát (ak relevantné)
 - [ ] Všetky testy používajú `getByTestId()` namiesto text selectors
 - [ ] React-select má `inputId` prop
 - [ ] Error messages majú `data-testid="[názov]-error"`
+- [ ] Backend API schema akceptuje `null` pre nepovinné polia (`.nullish()` alebo `.nullable().optional()`)
 
 ---
 

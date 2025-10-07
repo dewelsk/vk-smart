@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useInstitution, useUpdateInstitution } from '@/hooks/useInstitutions'
@@ -10,9 +10,9 @@ import { toast } from 'react-hot-toast'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 
 type Props = {
-  params: Promise<{
+  params: {
     id: string
-  }>
+  }
 }
 
 const QUESTION_TYPE_OPTIONS = [
@@ -25,8 +25,7 @@ const QUESTION_TYPE_OPTIONS = [
 export default function InstitutionDetailPage({ params }: Props) {
   const router = useRouter()
   const { data: session } = useSession()
-  const resolvedParams = use(params)
-  const institutionId = resolvedParams.id
+  const institutionId = params.id
 
   const { data, isLoading, error } = useInstitution(institutionId)
   const updateMutation = useUpdateInstitution()
