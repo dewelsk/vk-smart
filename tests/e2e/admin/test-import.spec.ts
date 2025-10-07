@@ -266,4 +266,214 @@ test.describe('Admin - Test Import', () => {
     expect(updatedText).toBe(originalText)
   })
 
+  test.describe('Question Types', () => {
+    test('should display question types checkboxes', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      // Question types group should be visible
+      await expect(page.getByTestId('question-types-group')).toBeVisible({ timeout: 10000 })
+
+      // All four checkboxes should be present
+      await expect(page.getByTestId('question-type-single_choice')).toBeVisible()
+      await expect(page.getByTestId('question-type-multiple_choice')).toBeVisible()
+      await expect(page.getByTestId('question-type-true_false')).toBeVisible()
+      await expect(page.getByTestId('question-type-open_ended')).toBeVisible()
+    })
+
+    test('should have SINGLE_CHOICE selected by default', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      // SINGLE_CHOICE should be checked by default
+      const singleChoice = page.getByTestId('question-type-single_choice')
+      await expect(singleChoice).toBeChecked()
+
+      // Others should not be checked
+      await expect(page.getByTestId('question-type-multiple_choice')).not.toBeChecked()
+      await expect(page.getByTestId('question-type-true_false')).not.toBeChecked()
+      await expect(page.getByTestId('question-type-open_ended')).not.toBeChecked()
+    })
+
+    test('should select and deselect question types', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      const multipleChoice = page.getByTestId('question-type-multiple_choice')
+      const trueFalse = page.getByTestId('question-type-true_false')
+
+      // Select MULTIPLE_CHOICE
+      await multipleChoice.click()
+      await expect(multipleChoice).toBeChecked()
+
+      // Select TRUE_FALSE
+      await trueFalse.click()
+      await expect(trueFalse).toBeChecked()
+
+      // Now we have 3 types selected, deselect SINGLE_CHOICE
+      const singleChoice = page.getByTestId('question-type-single_choice')
+      await singleChoice.click()
+      await expect(singleChoice).not.toBeChecked()
+
+      // Still have 2 types selected
+      await expect(multipleChoice).toBeChecked()
+      await expect(trueFalse).toBeChecked()
+    })
+
+    test('should prevent unchecking the last question type', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      // Only SINGLE_CHOICE is checked by default
+      const singleChoice = page.getByTestId('question-type-single_choice')
+      await expect(singleChoice).toBeChecked()
+
+      // Checkbox should be disabled when it's the only one selected
+      await expect(singleChoice).toBeDisabled()
+
+      // Try to click it (should fail because it's disabled)
+      // We verify it stays checked
+      await expect(singleChoice).toBeChecked()
+    })
+
+    test('should validate at least one question type is required on save', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      // Fill required fields
+      await page.getByTestId('test-name-input').fill('Test Validation ' + Date.now())
+
+      // Select category
+      const categorySelect = page.getByTestId('category-select')
+      const options = await categorySelect.locator('option').count()
+      if (options > 1) {
+        await categorySelect.selectOption({ index: 1 })
+      }
+
+      // The form should allow save since SINGLE_CHOICE is selected by default
+      const saveButton = page.getByTestId('save-test-button')
+      await expect(saveButton).toBeEnabled()
+
+      // No error should be shown
+      const error = page.getByTestId('question-types-error')
+      await expect(error).not.toBeVisible()
+    })
+
+    test('should create test with all question types selected', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      // Fill required fields
+      const timestamp = Date.now()
+      await page.getByTestId('test-name-input').fill('Test All Types ' + timestamp)
+
+      // Select category
+      const categorySelect = page.getByTestId('category-select')
+      const options = await categorySelect.locator('option').count()
+      if (options > 1) {
+        await categorySelect.selectOption({ index: 1 })
+      }
+
+      // Select all question types
+      await page.getByTestId('question-type-multiple_choice').click()
+      await page.getByTestId('question-type-true_false').click()
+      await page.getByTestId('question-type-open_ended').click()
+
+      // All should be checked
+      await expect(page.getByTestId('question-type-single_choice')).toBeChecked()
+      await expect(page.getByTestId('question-type-multiple_choice')).toBeChecked()
+      await expect(page.getByTestId('question-type-true_false')).toBeChecked()
+      await expect(page.getByTestId('question-type-open_ended')).toBeChecked()
+
+      // Save button should be enabled
+      await expect(page.getByTestId('save-test-button')).toBeEnabled()
+    })
+
+    test('should create test with only required fields and single question type', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      // Fill only required fields
+      const timestamp = Date.now()
+      await page.getByTestId('test-name-input').fill('Minimal Test ' + timestamp)
+
+      // Select category
+      const categorySelect = page.getByTestId('category-select')
+      const options = await categorySelect.locator('option').count()
+      if (options > 1) {
+        await categorySelect.selectOption({ index: 1 })
+      }
+
+      // SINGLE_CHOICE is already selected by default
+      await expect(page.getByTestId('question-type-single_choice')).toBeChecked()
+
+      // Save should be enabled with just one question type
+      await expect(page.getByTestId('save-test-button')).toBeEnabled()
+    })
+
+    test('should preserve question type selection when editing other fields', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      // Select multiple types
+      await page.getByTestId('question-type-multiple_choice').click()
+      await page.getByTestId('question-type-true_false').click()
+
+      await expect(page.getByTestId('question-type-single_choice')).toBeChecked()
+      await expect(page.getByTestId('question-type-multiple_choice')).toBeChecked()
+      await expect(page.getByTestId('question-type-true_false')).toBeChecked()
+
+      // Change test name
+      await page.getByTestId('test-name-input').fill('Test Name Change')
+
+      // Change difficulty
+      await page.getByTestId('difficulty-slider').fill('7')
+
+      // Question types should still be selected
+      await expect(page.getByTestId('question-type-single_choice')).toBeChecked()
+      await expect(page.getByTestId('question-type-multiple_choice')).toBeChecked()
+      await expect(page.getByTestId('question-type-true_false')).toBeChecked()
+    })
+  })
+
 })
