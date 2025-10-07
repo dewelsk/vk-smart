@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Select from 'react-select'
 import { DataTable } from '@/components/table/DataTable'
+import { PageHeader } from '@/components/PageHeader'
+import { ConfirmModal } from '@/components/ConfirmModal'
 import { PlusIcon, MagnifyingGlassIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useTestCategories, useCreateCategory, useUpdateCategory, useDeleteCategory, type TestCategory } from '@/hooks/useTestCategories'
@@ -36,6 +38,7 @@ function CategoryModal({ isOpen, onClose, category }: CategoryModalProps) {
   const [name, setName] = useState('')
   const [type, setType] = useState<TestTypeOption | null>(null)
   const [description, setDescription] = useState('')
+  const [errors, setErrors] = useState<{ name?: string; type?: string }>({})
 
   const createMutation = useCreateCategory()
   const updateMutation = useUpdateCategory()
@@ -57,24 +60,42 @@ function CategoryModal({ isOpen, onClose, category }: CategoryModalProps) {
       setType(null)
       setDescription('')
     }
+    setErrors({})
   }, [category, isOpen])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const newErrors: { name?: string; type?: string } = {}
+
+    if (!name.trim()) {
+      newErrors.name = 'Názov kategórie je povinný'
+    }
+
+    if (!type) {
+      newErrors.type = 'Typ testu je povinný'
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+
+    setErrors({})
 
     try {
       if (category) {
         await updateMutation.mutateAsync({
           id: category.id,
           name,
-          typeId: type?.value || null,
+          typeId: type.value,
           description: description || null
         })
         toast.success('Kategória bola úspešne aktualizovaná')
       } else {
         await createMutation.mutateAsync({
           name,
-          typeId: type?.value || null,
+          typeId: type.value,
           description: description || null
         })
         toast.success('Kategória bola úspešne vytvorená')
@@ -105,26 +126,66 @@ function CategoryModal({ isOpen, onClose, category }: CategoryModalProps) {
                     Názov kategórie *
                   </label>
                   <input
+                    data-testid="category-name-input"
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    required
+                    onChange={(e) => {
+                      setName(e.target.value)
+                      if (errors.name) {
+                        setErrors({ ...errors, name: undefined })
+                      }
+                    }}
+                    className={`
+                      mt-1 block w-full border rounded-md shadow-sm py-2 px-3
+                      focus:outline-none focus:ring-1 sm:text-sm
+                      ${errors.name
+                        ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                        : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+                      }
+                    `}
                   />
+                  {errors.name && (
+                    <p className="mt-2 text-sm text-red-600" data-testid="category-name-error">
+                      {errors.name}
+                    </p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    Typ testu (voliteľné)
+                    Typ testu *
                   </label>
-                  <Select
-                    isClearable
-                    value={type}
-                    onChange={setType}
-                    options={testTypeOptions}
-                    placeholder="Vyberte typ testu"
-                    className="mt-1"
-                  />
+                  <div data-testid="category-type-select">
+                    <Select
+                      value={type}
+                      onChange={(option) => {
+                        setType(option)
+                        if (errors.type) {
+                          setErrors({ ...errors, type: undefined })
+                        }
+                      }}
+                      options={testTypeOptions}
+                      placeholder="Vyberte typ testu"
+                      className="mt-1"
+                      inputId="category-type-select-input"
+                      menuPortalTarget={typeof document !== 'undefined' ? document.body : undefined}
+                      styles={{
+                        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                        control: (base) => ({
+                          ...base,
+                          borderColor: errors.type ? '#ef4444' : base.borderColor,
+                          '&:hover': {
+                            borderColor: errors.type ? '#ef4444' : base.borderColor,
+                          }
+                        })
+                      }}
+                    />
+                  </div>
+                  {errors.type && (
+                    <p className="mt-2 text-sm text-red-600" data-testid="category-type-error">
+                      {errors.type}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -173,6 +234,7 @@ export default function TestCategoriesPage() {
   const [pageSize, setPageSize] = useState(10)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<TestCategory | null>(null)
+  const [categoryToDelete, setCategoryToDelete] = useState<TestCategory | null>(null)
 
   const deleteMutation = useDeleteCategory()
 
@@ -219,19 +281,21 @@ export default function TestCategoriesPage() {
     setIsModalOpen(true)
   }
 
-  const handleDelete = async (category: TestCategory) => {
+  const handleDeleteClick = (category: TestCategory) => {
     if (category.testCount > 0) {
       toast.error('Kategóriu nemožno zmazať - obsahuje testy')
       return
     }
+    setCategoryToDelete(category)
+  }
 
-    if (!confirm(`Naozaj chcete zmazať kategóriu "${category.name}"?`)) {
-      return
-    }
+  const handleConfirmDelete = async () => {
+    if (!categoryToDelete) return
 
     try {
-      await deleteMutation.mutateAsync(category.id)
+      await deleteMutation.mutateAsync(categoryToDelete.id)
       toast.success('Kategória bola úspešne zmazaná')
+      setCategoryToDelete(null)
     } catch (error: any) {
       toast.error(error.message || 'Nepodarilo sa zmazať kategóriu')
     }
@@ -297,7 +361,7 @@ export default function TestCategoriesPage() {
               <PencilIcon className="h-5 w-5" />
             </button>
             <button
-              onClick={() => handleDelete(row.original)}
+              onClick={() => handleDeleteClick(row.original)}
               className="text-red-600 hover:text-red-800"
               title="Zmazať"
               disabled={row.original.testCount > 0}
@@ -312,24 +376,11 @@ export default function TestCategoriesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="sm:flex sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Link
-              href="/tests"
-              className="text-sm text-gray-500 hover:text-gray-700"
-            >
-              ← Späť na Testy
-            </Link>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">📂 Kategórie testov</h1>
-          <p className="mt-2 text-sm text-gray-700">
-            Organizácia testov podľa úrovne a špecializácie
-          </p>
-        </div>
-        {isSuperAdmin && (
-          <div className="mt-4 sm:mt-0">
+      <PageHeader
+        title="Kategórie testov"
+        description="Organizácia testov podľa úrovne a špecializácie"
+        actions={
+          isSuperAdmin ? (
             <button
               onClick={handleAddNew}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -337,9 +388,9 @@ export default function TestCategoriesPage() {
               <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
               Pridať kategóriu
             </button>
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* Filters */}
       <div className="bg-white shadow rounded-lg p-4">
@@ -414,6 +465,18 @@ export default function TestCategoriesPage() {
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         category={editingCategory}
+      />
+
+      {/* Delete Confirm Modal */}
+      <ConfirmModal
+        isOpen={!!categoryToDelete}
+        title="Vymazať kategóriu"
+        message={`Naozaj chcete vymazať kategóriu "${categoryToDelete?.name}"?`}
+        confirmLabel="Vymazať"
+        cancelLabel="Zrušiť"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setCategoryToDelete(null)}
       />
     </div>
   )

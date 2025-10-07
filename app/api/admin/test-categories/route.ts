@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 const createTestCategorySchema = z.object({
   name: z.string().min(1, 'Názov je povinný'),
-  typeId: z.string().optional(),
+  typeId: z.string().min(1, 'Typ testu je povinný'),
   description: z.string().optional(),
 })
 
@@ -135,25 +135,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // If typeId provided, verify it exists
-    if (typeId) {
-      const typeExists = await prisma.testType.findUnique({
-        where: { id: typeId }
-      })
+    // Verify typeId exists
+    const typeExists = await prisma.testType.findUnique({
+      where: { id: typeId }
+    })
 
-      if (!typeExists) {
-        return NextResponse.json(
-          { error: 'Zvolený typ testu neexistuje' },
-          { status: 400 }
-        )
-      }
+    if (!typeExists) {
+      return NextResponse.json(
+        { error: 'Zvolený typ testu neexistuje' },
+        { status: 400 }
+      )
     }
 
     // Create test category
     const testCategory = await prisma.testCategory.create({
       data: {
         name,
-        typeId: typeId || null,
+        typeId,
         description: description || null
       },
       include: {

@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 const updateTestCategorySchema = z.object({
   name: z.string().min(1, 'Názov je povinný').optional(),
-  typeId: z.string().nullable().optional(),
+  typeId: z.string().min(1, 'Typ testu je povinný').optional(),
   description: z.string().nullable().optional(),
 })
 
@@ -117,8 +117,8 @@ export async function PATCH(
       }
     }
 
-    // If typeId provided and changed, verify it exists
-    if (typeId !== undefined && typeId !== null && typeId !== existing.typeId) {
+    // If typeId provided, verify it exists
+    if (typeId !== undefined) {
       const typeExists = await prisma.testType.findUnique({
         where: { id: typeId }
       })

@@ -60,8 +60,8 @@ export function useTestCategories(params: UseTestCategoriesParams = {}) {
 
 type CreateCategoryData = {
   name: string
-  typeId?: string
-  description?: string
+  typeId: string
+  description?: string | null
 }
 
 async function createCategory(data: CreateCategoryData): Promise<TestCategory> {
@@ -95,7 +95,7 @@ export function useCreateCategory() {
 type UpdateCategoryData = {
   id: string
   name?: string
-  typeId?: string | null
+  typeId?: string
   description?: string | null
 }
 

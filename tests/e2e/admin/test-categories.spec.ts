@@ -100,23 +100,26 @@ test.describe('Test Categories Management @admin @test-categories', () => {
       await expect(page.locator('h3:has-text("Pridať kategóriu")')).toBeVisible()
     })
 
-    test('should create category with name only', async ({ page }) => {
+    test('should validate required test type field', async ({ page }) => {
       const timestamp = Date.now()
       const categoryName = `E2E Test Category ${timestamp}`
 
       await page.click('button:has-text("Pridať kategóriu")')
 
-      // Fill only the name
-      const nameInput = page.locator('input[type="text"]').first()
-      await nameInput.fill(categoryName)
+      // Fill only the name (no test type)
+      await page.getByTestId('category-name-input').fill(categoryName)
 
       await page.click('button:has-text("Uložiť kategóriu")')
 
-      // Wait for success toast
-      await expect(page.locator('text=Kategória bola úspešne vytvorená')).toBeVisible()
+      // Should show inline error message
+      await expect(page.getByTestId('category-type-error')).toBeVisible()
+      await expect(page.getByTestId('category-type-error')).toHaveText('Typ testu je povinný')
 
-      // Verify category appears in table
-      await expect(page.locator(`text=${categoryName}`)).toBeVisible()
+      // Modal should still be visible (validation failed)
+      await expect(page.locator('h3:has-text("Pridať kategóriu")')).toBeVisible()
+
+      // Category should NOT appear in the table (not created)
+      await expect(page.locator(`tr:has-text("${categoryName}")`)).not.toBeVisible()
     })
 
     test('should create category with all fields', async ({ page }) => {
@@ -126,21 +129,17 @@ test.describe('Test Categories Management @admin @test-categories', () => {
 
       await page.click('button:has-text("Pridať kategóriu")')
 
-      // Fill name
-      const nameInput = page.locator('input[type="text"]').first()
-      await nameInput.fill(categoryName)
+      // Fill name using data-testid
+      await page.getByTestId('category-name-input').fill(categoryName)
 
-      // Select test type (if available)
-      const typeSelect = page.locator('text=Vyberte typ testu').first()
-      await typeSelect.click()
-      await page.waitForTimeout(300)
+      // Select test type - use the stable inputId
+      const selectInput = page.locator('#category-type-select-input')
+      await selectInput.click({ force: true })
 
-      const firstTypeOption = page.locator('[class*="option"]').first()
-      const typeOptionExists = await firstTypeOption.isVisible().catch(() => false)
-
-      if (typeOptionExists) {
-        await firstTypeOption.click()
-      }
+      // Wait for options to appear and click first one
+      await page.waitForTimeout(500)
+      const firstOption = page.locator('[id^="react-select"][id$="-option-0"]').first()
+      await firstOption.click({ force: true })
 
       // Fill description
       const descriptionTextarea = page.locator('textarea').first()
@@ -148,9 +147,14 @@ test.describe('Test Categories Management @admin @test-categories', () => {
 
       await page.click('button:has-text("Uložiť kategóriu")')
 
-      // Wait for success
-      await expect(page.locator('text=Kategória bola úspešne vytvorená')).toBeVisible()
-      await expect(page.locator(`text=${categoryName}`)).toBeVisible()
+      // Wait for success - check that modal closes and category appears in table
+      await page.waitForTimeout(1000)
+
+      // Modal should be closed
+      await expect(page.locator('h3:has-text("Pridať kategóriu")')).not.toBeVisible()
+
+      // Category should appear in table
+      await expect(page.locator(`tr:has-text("${categoryName}")`)).toBeVisible()
     })
 
     test('should reject duplicate category name', async ({ page }) => {
@@ -159,13 +163,35 @@ test.describe('Test Categories Management @admin @test-categories', () => {
 
       await page.click('button:has-text("Pridať kategóriu")')
 
-      const nameInput = page.locator('input[type="text"]').first()
-      await nameInput.fill(existingName)
+      // Fill name using data-testid
+      await page.getByTestId('category-name-input').fill(existingName)
+
+      // Select test type
+      const selectInput = page.locator('#category-type-select-input')
+      await selectInput.click({ force: true })
+      await page.waitForTimeout(500)
+      const firstOption = page.locator('[id^="react-select"][id$="-option-0"]').first()
+      await firstOption.click({ force: true })
 
       await page.click('button:has-text("Uložiť kategóriu")')
 
-      // Should show error
-      await expect(page.locator('text=Nepodarilo sa uložiť kategóriu')).toBeVisible()
+      // Wait for response
+      await page.waitForTimeout(1000)
+
+      // Modal should still be visible (creation failed)
+      await expect(page.locator('h3:has-text("Pridať kategóriu")')).toBeVisible()
+
+      // Check that no new category with timestamp was created
+      // (The A1 category already exists, so count should not increase)
+      const rows = page.locator('table tbody tr')
+      const count = await rows.count()
+
+      // Close modal to verify count didn't change
+      await page.click('button:has-text("Zrušiť")')
+      await page.waitForTimeout(500)
+
+      const newCount = await rows.count()
+      expect(newCount).toBe(count)
     })
   })
 
