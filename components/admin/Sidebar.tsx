@@ -46,6 +46,7 @@ export default function Sidebar({ session }: SidebarProps) {
       roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'],
       children: [
         { name: 'Zoznam testov', href: '/tests' },
+        { name: 'Import testov', href: '/tests/import' },
         { name: 'Typy testov', href: '/tests/types' },
         { name: 'Kategórie testov', href: '/tests/categories' },
         { name: 'Precvičovanie', href: '/tests/practice' },
@@ -138,7 +139,7 @@ export default function Sidebar({ session }: SidebarProps) {
                   {isExpanded && (
                     <div className="ml-4 mt-1 space-y-1">
                       {item.children?.map((child) => {
-                        const isChildItemActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                        const isChildItemActive = pathname === child.href
                         return (
                           <Link
                             key={child.href}

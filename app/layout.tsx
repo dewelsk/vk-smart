@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Roboto } from 'next/font/google'
 import './globals.css'
 import dynamic from 'next/dynamic'
+import { Toaster } from 'react-hot-toast'
 import { QueryProvider } from '@/components/providers/QueryProvider'
 import { SessionProvider } from '@/components/providers/SessionProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -34,6 +35,7 @@ export default function RootLayout({
       <body className={roboto.className}>
         <ErrorBoundary>
           <ToastProvider>
+            <Toaster position="top-right" />
             <BackendErrorMonitor />
             <SessionProvider>
               <QueryProvider>

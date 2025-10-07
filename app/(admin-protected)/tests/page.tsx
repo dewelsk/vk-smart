@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Select from 'react-select'
 import { DataTable } from '@/components/table/DataTable'
+import { PageHeader } from '@/components/PageHeader'
 import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useTests, type Test } from '@/hooks/useTests'
@@ -206,15 +207,10 @@ export default function TestsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="sm:flex sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Testy</h1>
-          <p className="mt-2 text-sm text-gray-700">
-            Pool hotových testov pre výberové konania
-          </p>
-        </div>
-        <div className="mt-4 sm:mt-0">
+      <PageHeader
+        title="Testy"
+        description="Pool hotových testov pre výberové konania"
+        actions={
           <Link
             href="/tests/new"
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -222,8 +218,8 @@ export default function TestsPage() {
             <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
             Vytvoriť test
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filters */}
       <div className="bg-white shadow rounded-lg p-4">
