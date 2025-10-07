@@ -28,6 +28,9 @@ model Institution {
   code        String   @unique
   description String?
 
+  // Allowed question types for tests in this institution
+  allowedQuestionTypes Json? @default("[\"SINGLE_CHOICE\"]")
+
   active      Boolean  @default(true)
 
   // Generated search columns for diacritic-insensitive search

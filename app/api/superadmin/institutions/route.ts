@@ -85,6 +85,7 @@ export async function GET(request: NextRequest) {
       code: inst.code,
       description: inst.description,
       active: inst.active,
+      allowedQuestionTypes: inst.allowedQuestionTypes || ['SINGLE_CHOICE'],
       createdAt: inst.createdAt,
       vkCount: inst._count.vks,
       adminCount: inst._count.users

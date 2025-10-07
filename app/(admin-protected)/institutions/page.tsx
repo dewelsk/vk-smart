@@ -14,6 +14,7 @@ type Institution = {
   code: string
   description: string | null
   active: boolean
+  allowedQuestionTypes: string[]
   createdAt: string
   vkCount: number
   adminCount: number
@@ -29,6 +30,42 @@ function getStatusBadge(active: boolean) {
     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
       <XMarkIcon className="h-4 w-4 inline-block mr-1" />
       Neaktívny
+    </span>
+  )
+}
+
+function getQuestionTypeName(type: string): string {
+  const names: { [key: string]: string } = {
+    'SINGLE_CHOICE': 'Jednovýberová',
+    'MULTIPLE_CHOICE': 'Viacvýberová',
+    'TRUE_FALSE': 'Pravda/Nepravda',
+    'OPEN_ENDED': 'Otvorená',
+  }
+  return names[type] || type
+}
+
+function getQuestionTypesDisplay(types: string[]): JSX.Element {
+  if (!types || types.length === 0) {
+    return <span className="text-gray-400 text-xs">-</span>
+  }
+
+  if (types.length === 1) {
+    return (
+      <span className="text-sm text-gray-900">
+        {getQuestionTypeName(types[0])}
+      </span>
+    )
+  }
+
+  const typesList = types.map(getQuestionTypeName).join(', ')
+
+  return (
+    <span
+      className="text-sm text-blue-600 cursor-help"
+      title={typesList}
+      data-testid="question-types-multiple"
+    >
+      [{types.length} typy ⓘ]
     </span>
   )
 }
@@ -122,7 +159,13 @@ export default function InstitutionsPage() {
       header: 'Názov rezortu',
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.name}</div>
+          <Link
+            href={`/institutions/${row.original.id}`}
+            className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+            data-testid={`institution-link-${row.original.id}`}
+          >
+            {row.original.name}
+          </Link>
           <div className="text-xs text-gray-500">
             Vytvorený: {new Date(row.original.createdAt).toLocaleDateString('sk-SK')}
           </div>
@@ -135,6 +178,11 @@ export default function InstitutionsPage() {
       cell: ({ row }) => (
         <span className="font-mono text-sm">{row.original.code}</span>
       ),
+    },
+    {
+      accessorKey: 'allowedQuestionTypes',
+      header: 'Povolené typy',
+      cell: ({ row }) => getQuestionTypesDisplay(row.original.allowedQuestionTypes || []),
     },
     {
       accessorKey: 'vkCount',
