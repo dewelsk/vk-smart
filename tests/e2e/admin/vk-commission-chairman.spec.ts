@@ -98,6 +98,76 @@ test.describe('VK Commission Chairman Toggle @admin @vk @commission', () => {
     await expect(firstRowBadge).not.toBeVisible()
   })
 
+  test('should remove chairman status with "Odobrat predsedu" button', async ({ page }) => {
+    // Check if commission exists
+    const hasTable = await page.locator('table').isVisible().catch(() => false)
+
+    if (!hasTable) {
+      console.log('No commission - creating one first')
+
+      // Create commission with 2 members
+      await page.locator('#add-commission-member-btn').click()
+      await page.waitForTimeout(500)
+
+      const checkboxes = page.locator('[data-testid^="member-checkbox-"]')
+      const count = await checkboxes.count()
+
+      if (count < 2) {
+        test.skip()
+        return
+      }
+
+      // Select 2 members
+      await checkboxes.nth(0).check()
+      await checkboxes.nth(1).check()
+
+      // Set first as chairman
+      const firstCheckboxTestId = await checkboxes.nth(0).getAttribute('data-testid')
+      const userId = firstCheckboxTestId?.replace('member-checkbox-', '')
+      await page.locator(`[data-testid="chairman-radio-${userId}"]`).check()
+
+      // Save
+      await page.locator('#commission-save-btn').click()
+      await page.waitForTimeout(2000)
+    }
+
+    // Verify there is a chairman
+    const chairmanBadge = page.locator('[data-testid^="chairman-badge-"]').first()
+    const hasChairman = await chairmanBadge.isVisible().catch(() => false)
+
+    if (!hasChairman) {
+      console.log('No chairman - setting one first')
+      const firstRow = page.locator('tbody tr').first()
+      await firstRow.locator('button:has-text("Nastaviť ako predsedu")').click()
+      await page.waitForTimeout(1000)
+    }
+
+    // Verify chairman badge is visible
+    await expect(chairmanBadge).toBeVisible()
+
+    console.log('Chairman badge found')
+
+    // Find and click "Odobrat predsedu" button
+    const removeChairmanButton = page.locator('button:has-text("Odobrat predsedu")').first()
+    await expect(removeChairmanButton).toBeVisible()
+
+    console.log('Clicking "Odobrat predsedu" button')
+
+    await removeChairmanButton.click()
+    await page.waitForTimeout(2000)
+
+    // Verify chairman badge is gone
+    const chairmanBadgeAfter = page.locator('[data-testid^="chairman-badge-"]')
+    await expect(chairmanBadgeAfter).not.toBeVisible()
+
+    console.log('Chairman badge removed')
+
+    // Verify success toast
+    await expect(page.locator('text=Používateľ už nie je predseda')).toBeVisible({ timeout: 3000 })
+
+    console.log('Success toast shown')
+  })
+
   test('should show existing members as checked when opening modal', async ({ page }) => {
     // Check if commission exists
     const hasTable = await page.locator('table').isVisible().catch(() => false)

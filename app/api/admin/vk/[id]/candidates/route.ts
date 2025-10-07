@@ -58,6 +58,12 @@ export async function POST(
         role: 'UCHADZAC',
         active: true,
         deleted: false
+      },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        surname: true
       }
     })
 
@@ -88,12 +94,12 @@ export async function POST(
       )
     }
 
-    // Generate CIS identifiers and create candidates
-    const timestamp = Date.now()
-    const candidatesData = userIdArray.map((userId, index) => ({
+    // Use existing username from users table as CIS identifier
+    const usersMap = new Map(users.map(u => [u.id, u.username]))
+    const candidatesData = userIdArray.map((userId) => ({
       vkId,
       userId,
-      cisIdentifier: `CIS${timestamp + index}`,
+      cisIdentifier: usersMap.get(userId)!,
       email: null
     }))
 

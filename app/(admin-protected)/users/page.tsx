@@ -146,7 +146,7 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 data-testid="page-title" className="text-3xl font-bold text-gray-900">
             Správa používateľov
           </h1>
           <p className="mt-2 text-gray-600">

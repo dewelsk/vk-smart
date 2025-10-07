@@ -20,6 +20,8 @@ import { AddCandidateModal } from '@/components/vk/AddCandidateModal'
 import { DataTable } from '@/components/table/DataTable'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { ValidationIssue } from '@/lib/vk-validation'
+import { useToast } from '@/components/Toast'
+import { ConfirmModal } from '@/components/ConfirmModal'
 
 type VK = {
   id: string
@@ -109,6 +111,7 @@ export default function VKDetailPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const vkId = params.id as string
+  const { showSuccess, showError } = useToast()
 
   const [loading, setLoading] = useState(true)
   const [vk, setVK] = useState<VK | null>(null)
@@ -384,7 +387,7 @@ function OverviewTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Komisia</h3>
           {vk.commission && vk.commission.members.length > 0 ? (
             <div>
-              <p className="font-medium">{vk.commission.members.length} členov</p>
+              <p className="font-medium">{getMemberCountText(vk.commission.members.length)}</p>
               <p className="text-sm text-gray-600">
                 Predseda: {vk.commission.members.find(m => m.isChairman)
                   ? `${vk.commission.members.find(m => m.isChairman)!.user.name} ${vk.commission.members.find(m => m.isChairman)!.user.surname}`
@@ -458,27 +461,33 @@ function getMemberCountText(count: number): string {
 }
 
 function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
+  const { showSuccess, showError } = useToast()
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [memberToRemove, setMemberToRemove] = useState<string | null>(null)
 
-  async function handleRemoveMember(memberId: string) {
-    if (!confirm('Naozaj chcete odstrániť člena z komisie?')) return
+  async function handleRemoveConfirm() {
+    if (!memberToRemove) return
 
+    const memberId = memberToRemove
+    setMemberToRemove(null)
     setDeleting(memberId)
+
     try {
       const res = await fetch(`/api/admin/vk/${vk.id}/commission/members/${memberId}`, {
         method: 'DELETE'
       })
 
       if (res.ok) {
+        showSuccess('Člen komisie bol úspešne odstránený')
         onRefresh()
       } else {
         const data = await res.json()
-        alert(data.error || 'Chyba pri odstraňovaní člena')
+        showError(data.error || 'Chyba pri odstraňovaní člena')
       }
     } catch (error) {
       console.error('Error removing member:', error)
-      alert('Chyba pri odstraňovaní člena')
+      showError('Chyba pri odstraňovaní člena')
     } finally {
       setDeleting(null)
     }
@@ -499,15 +508,16 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
       if (res.ok) {
         const data = await res.json()
         console.log('Chairman toggled successfully:', data)
+        showSuccess(currentIsChairman ? 'Používateľ už nie je predseda' : 'Používateľ bol nastavený ako predseda')
         onRefresh()
       } else {
         const data = await res.json()
         console.error('Failed to toggle chairman:', data)
-        alert(data.error || 'Chyba pri zmene predsedu')
+        showError(data.error || 'Chyba pri zmene predsedu')
       }
     } catch (error) {
       console.error('Error toggling chairman:', error)
-      alert('Chyba pri zmene predsedu: ' + (error instanceof Error ? error.message : String(error)))
+      showError('Chyba pri zmene predsedu: ' + (error instanceof Error ? error.message : String(error)))
     }
   }
 
@@ -552,10 +562,10 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
             onClick={() => handleToggleChairman(row.original.id, row.original.isChairman)}
             className="text-blue-600 hover:text-blue-900 text-sm"
           >
-            {row.original.isChairman ? 'Odobrať z predsedu' : 'Nastaviť ako predsedu'}
+            {row.original.isChairman ? 'Odobrat predsedu' : 'Nastaviť ako predsedu'}
           </button>
           <button
-            onClick={() => handleRemoveMember(row.original.id)}
+            onClick={() => setMemberToRemove(row.original.id)}
             disabled={deleting === row.original.id}
             className="text-red-600 hover:text-red-900 text-sm disabled:opacity-50"
           >
@@ -646,6 +656,18 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
           />
         )
       })()}
+
+      {/* Remove Member Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!memberToRemove}
+        title="Odstrániť člena komisie"
+        message="Naozaj chcete odstrániť tohto člena z komisie? Táto akcia je nevratná."
+        confirmLabel="Odstrániť"
+        cancelLabel="Zrušiť"
+        variant="danger"
+        onConfirm={handleRemoveConfirm}
+        onCancel={() => setMemberToRemove(null)}
+      />
     </div>
   )
 }
@@ -653,12 +675,16 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
 type Candidate = VK['candidates'][0]
 
 function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
+  const { showSuccess, showError } = useToast()
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [candidateToRemove, setCandidateToRemove] = useState<string | null>(null)
 
-  async function handleRemoveCandidate(candidateId: string) {
-    if (!confirm('Naozaj chcete odstrániť uchádzača?')) return
+  async function handleRemoveConfirm() {
+    if (!candidateToRemove) return
 
+    const candidateId = candidateToRemove
+    setCandidateToRemove(null)
     setDeleting(candidateId)
     try {
       const res = await fetch(`/api/admin/vk/${vk.id}/candidates/${candidateId}`, {
@@ -666,14 +692,15 @@ function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
       })
 
       if (res.ok) {
+        showSuccess('Uchádzač bol úspešne odstránený')
         onRefresh()
       } else {
         const data = await res.json()
-        alert(data.error || 'Chyba pri odstraňovaní uchádzača')
+        showError(data.error || 'Chyba pri odstraňovaní uchádzača')
       }
     } catch (error) {
       console.error('Error removing candidate:', error)
-      alert('Chyba pri odstraňovaní uchádzača')
+      showError('Chyba pri odstraňovaní uchádzača')
     } finally {
       setDeleting(null)
     }
@@ -698,7 +725,7 @@ function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
     },
     {
       header: 'Email',
-      accessorFn: (row) => row.email || '-',
+      accessorFn: (row) => row.user.email || '-',
     },
     {
       header: 'CIS identifikátor',
@@ -714,7 +741,7 @@ function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
       cell: ({ row }) => (
         <div className="space-x-2">
           <button
-            onClick={() => handleRemoveCandidate(row.original.id)}
+            onClick={() => setCandidateToRemove(row.original.id)}
             disabled={deleting === row.original.id}
             className="text-red-600 hover:text-red-900 text-sm disabled:opacity-50"
           >
@@ -767,6 +794,18 @@ function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
           onSuccess={onRefresh}
         />
       )}
+
+      {/* Remove Candidate Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!candidateToRemove}
+        title="Odstrániť uchádzača"
+        message="Naozaj chcete odstrániť tohto uchádzača? Táto akcia je nevratná."
+        confirmLabel="Odstrániť"
+        cancelLabel="Zrušiť"
+        variant="danger"
+        onConfirm={handleRemoveConfirm}
+        onCancel={() => setCandidateToRemove(null)}
+      />
     </div>
   )
 }

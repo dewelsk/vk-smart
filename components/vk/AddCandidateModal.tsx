@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { useToast } from '@/components/Toast'
 
 type User = {
   id: string
@@ -22,6 +23,7 @@ export function AddCandidateModal({
   onClose,
   onSuccess
 }: AddCandidateModalProps) {
+  const { showSuccess, showError } = useToast()
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,7 +88,7 @@ export function AddCandidateModal({
 
   async function handleSave() {
     if (selectedUserIds.length === 0) {
-      alert('Vyberte aspoň jedného uchádzača')
+      showError('Vyberte aspoň jedného uchádzača')
       return
     }
 
@@ -102,16 +104,17 @@ export function AddCandidateModal({
 
       if (res.ok) {
         const data = await res.json()
-        alert(`Úspešne pridaných ${data.count} uchádzačov`)
+        const uchadziaci = data.count === 1 ? 'uchádzača' : data.count >= 2 && data.count <= 4 ? 'uchádzačov' : 'uchádzačov'
+        showSuccess(`Pridali ste ${data.count} ${uchadziaci}`)
         onSuccess()
         onClose()
       } else {
         const data = await res.json()
-        alert(data.error || 'Chyba pri pridávaní uchádzačov')
+        showError(data.error || 'Chyba pri pridávaní uchádzačov')
       }
     } catch (error) {
       console.error('Error adding candidates:', error)
-      alert('Chyba pri pridávaní uchádzačov')
+      showError('Chyba pri pridávaní uchádzačov')
     } finally {
       setSaving(false)
     }
@@ -219,7 +222,7 @@ export function AddCandidateModal({
               {selectedUserIds.length > 0 && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-sm text-blue-800">
-                    <strong>Poznámka:</strong> CIS identifikátory budú automaticky vygenerované pri pridaní uchádzačov.
+                    <strong>Poznámka:</strong> CIS identifikátory budú prebraté z existujúcich používateľských mien.
                   </p>
                 </div>
               )}

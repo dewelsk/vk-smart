@@ -7,52 +7,48 @@ test.describe('Admin Dashboard @admin @dashboard @smoke', () => {
   })
 
   test('should display dashboard with statistics', async ({ page }) => {
-    await expect(page.locator('h1').last()).toContainText('Dashboard')
+    await expect(page.getByTestId('page-title')).toContainText('Dashboard')
 
     // Check stats cards are visible
-    await expect(page.locator('text=Aktívne VK')).toBeVisible()
-    await expect(page.locator('text=Uchádzači')).toBeVisible()
-    await expect(page.locator('text=Používatelia')).toBeVisible()
+    await expect(page.getByTestId('active-vk-card')).toBeVisible()
+    await expect(page.getByTestId('candidates-card')).toBeVisible()
+    await expect(page.getByTestId('users-card')).toBeVisible()
   })
 
   test('should display stats numbers', async ({ page }) => {
     // Stats should have numbers
-    const activeVKCard = page.locator('text=Aktívne VK').locator('..')
-    await expect(activeVKCard.locator('.text-3xl')).toBeVisible()
-
-    const candidatesCard = page.locator('text=Uchádzači').locator('..')
-    await expect(candidatesCard.locator('.text-3xl')).toBeVisible()
-
-    const usersCard = page.locator('text=Používatelia').locator('..')
-    await expect(usersCard.locator('.text-3xl')).toBeVisible()
+    await expect(page.getByTestId('active-vk-count')).toBeVisible()
+    await expect(page.getByTestId('candidates-count')).toBeVisible()
+    await expect(page.getByTestId('users-count')).toBeVisible()
   })
 
   test('should navigate to VK list when clicking Active VK card', async ({ page }) => {
-    await page.click('text=Aktívne VK')
+    await page.getByTestId('active-vk-card').click()
     await page.waitForURL('/vk')
-    await expect(page.locator('h1').last()).toContainText('Výberové konania')
+    await expect(page).toHaveURL('/vk')
   })
 
   test('should navigate to applicants list when clicking Applicants card', async ({ page }) => {
-    await page.click('text=Uchádzači')
+    await page.getByTestId('candidates-card').click()
     await page.waitForURL('/applicants')
-    await expect(page.locator('h1').last()).toContainText('Uchádzači')
+    await expect(page).toHaveURL('/applicants')
   })
 
   test('should navigate to users list when clicking Users card', async ({ page }) => {
-    await page.click('text=Používatelia')
+    await page.getByTestId('users-card').click()
     await page.waitForURL('/users')
-    await expect(page.locator('h1').last()).toContainText('Používatelia')
+    await expect(page).toHaveURL('/users')
   })
 
   test('should display recent VK section', async ({ page }) => {
-    await expect(page.locator('text=Posledné výberové konania')).toBeVisible()
-    await expect(page.locator('text=Nové VK')).toBeVisible()
+    await expect(page.getByTestId('recent-vk-section')).toBeVisible()
+    await expect(page.getByTestId('recent-vk-title')).toBeVisible()
+    await expect(page.getByTestId('create-vk-button')).toBeVisible()
   })
 
   test('should navigate to create VK when clicking create VK link', async ({ page }) => {
-    await page.click('a[href="/vk/new"]')
+    await page.getByTestId('create-vk-button').click()
     await page.waitForURL('/vk/new')
-    await expect(page.locator('h1').last()).toContainText('Vytvorenie nového výberového konania')
+    await expect(page).toHaveURL('/vk/new')
   })
 })

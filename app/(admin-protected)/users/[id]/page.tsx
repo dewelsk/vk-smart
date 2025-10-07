@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation'
 import Select from 'react-select'
 import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/24/outline'
 import Link from 'next/link'
+import { useToast } from '@/components/Toast'
+import { ConfirmModal } from '@/components/ConfirmModal'
 
 type Institution = {
   id: string
@@ -56,11 +58,13 @@ export default function UserDetailPage() {
   const router = useRouter()
   const params = useParams()
   const userId = params.id as string
+  const { showSuccess, showError } = useToast()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [institutions, setInstitutions] = useState<InstitutionOption[]>([])
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     surname: '',
@@ -186,8 +190,8 @@ export default function UserDetailPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!confirm('Naozaj chcete odstrániť tohto používateľa?')) return
+  async function handleDeleteConfirm() {
+    setShowDeleteConfirm(false)
 
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
@@ -196,15 +200,16 @@ export default function UserDetailPage() {
 
       if (!res.ok) {
         const data = await res.json()
-        alert(data.error || 'Chyba pri odstraňovaní používateľa')
+        showError(data.error || 'Chyba pri odstraňovaní používateľa')
         return
       }
 
       // Success - redirect to list
+      showSuccess('Používateľ bol úspešne odstránený')
       router.push('/users')
     } catch (error) {
       console.error('Failed to delete user:', error)
-      alert('Chyba pri odstraňovaní používateľa')
+      showError('Chyba pri odstraňovaní používateľa')
     }
   }
 
@@ -249,7 +254,7 @@ export default function UserDetailPage() {
           </div>
         </div>
         <button
-          onClick={handleDelete}
+          onClick={() => setShowDeleteConfirm(true)}
           className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
         >
           <TrashIcon className="h-5 w-5" />
@@ -460,6 +465,18 @@ export default function UserDetailPage() {
           </div>
         </div>
       </form>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        title="Odstrániť používateľa"
+        message="Naozaj chcete odstrániť tohto používateľa? Táto akcia je nevratná."
+        confirmLabel="Odstrániť"
+        cancelLabel="Zrušiť"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   )
 }

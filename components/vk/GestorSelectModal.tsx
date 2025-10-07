@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { useToast } from '@/components/Toast'
 
 type User = {
   id: string
@@ -24,6 +25,7 @@ export function GestorSelectModal({
   onClose,
   onSuccess
 }: GestorSelectModalProps) {
+  const { showSuccess, showError } = useToast()
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -84,15 +86,16 @@ export function GestorSelectModal({
       })
 
       if (res.ok) {
+        showSuccess('Gestor bol úspešne zmenený')
         onSuccess()
         onClose()
       } else {
         const data = await res.json()
-        alert(data.error || 'Chyba pri zmene gestora')
+        showError(data.error || 'Chyba pri zmene gestora')
       }
     } catch (error) {
       console.error('Error changing gestor:', error)
-      alert('Chyba pri zmene gestora')
+      showError('Chyba pri zmene gestora')
     } finally {
       setSaving(false)
     }

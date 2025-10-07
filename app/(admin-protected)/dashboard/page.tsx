@@ -99,16 +99,16 @@ export default async function AdminDashboard() {
   const { stats, recentVKs, statusBreakdown } = await getDashboardData()
 
   return (
-    <div>
+    <div data-testid="dashboard-page">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <h1 data-testid="page-title" className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <p className="mt-2 text-gray-600">Prehľad výberových konaní a štatistík</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* Active VK Card */}
-        <Link href="/vk">
+        <Link href="/vk" data-testid="active-vk-card">
           <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -117,8 +117,8 @@ export default async function AdminDashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Aktívne VK</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.activeVKs}</p>
+                <p data-testid="active-vk-label" className="text-sm font-medium text-gray-600">Aktívne VK</p>
+                <p data-testid="active-vk-count" className="text-3xl font-bold text-gray-900">{stats.activeVKs}</p>
                 <p className="text-xs text-gray-500">z {stats.totalVKs} celkom</p>
               </div>
             </div>
@@ -126,7 +126,7 @@ export default async function AdminDashboard() {
         </Link>
 
         {/* Candidates Card */}
-        <Link href="/applicants">
+        <Link href="/applicants" data-testid="candidates-card">
           <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -135,15 +135,15 @@ export default async function AdminDashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Uchádzači</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.totalCandidates}</p>
+                <p data-testid="candidates-label" className="text-sm font-medium text-gray-600">Uchádzači</p>
+                <p data-testid="candidates-count" className="text-3xl font-bold text-gray-900">{stats.totalCandidates}</p>
               </div>
             </div>
           </div>
         </Link>
 
         {/* Users Card */}
-        <Link href="/users">
+        <Link href="/users" data-testid="users-card">
           <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -152,8 +152,8 @@ export default async function AdminDashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Používatelia</p>
-                <p className="text-3xl font-bold text-gray-900">{stats.totalUsers}</p>
+                <p data-testid="users-label" className="text-sm font-medium text-gray-600">Používatelia</p>
+                <p data-testid="users-count" className="text-3xl font-bold text-gray-900">{stats.totalUsers}</p>
               </div>
             </div>
           </div>
@@ -161,13 +161,14 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Recent VK Section */}
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow" data-testid="recent-vk-section">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 data-testid="recent-vk-title" className="text-xl font-semibold text-gray-900">
             Posledné výberové konania
           </h2>
           <Link
             href="/vk/new"
+            data-testid="create-vk-button"
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
           >
             + Nové VK

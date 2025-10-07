@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { PlusIcon, MagnifyingGlassIcon, CheckIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { DataTable } from '@/components/table/DataTable'
 import type { ColumnDef } from '@tanstack/react-table'
+import { ConfirmModal } from '@/components/ConfirmModal'
+import { useToast } from '@/components/Toast'
 
 type Institution = {
   id: string
@@ -32,12 +34,14 @@ function getStatusBadge(active: boolean) {
 }
 
 export default function InstitutionsPage() {
+  const { showSuccess, showError } = useToast()
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showActive, setShowActive] = useState(true)
   const [showInactive, setShowInactive] = useState(false)
+  const [institutionToToggle, setInstitutionToToggle] = useState<{ id: string; active: boolean } | null>(null)
 
   // Debounce search input
   useEffect(() => {
@@ -82,12 +86,15 @@ export default function InstitutionsPage() {
     }
   }
 
-  async function toggleActive(id: string, currentActive: boolean) {
-    const confirmMsg = currentActive
-      ? 'Naozaj chcete deaktivovať tento rezort? Admini tohto rezortu sa nebudú môcť prihlásiť.'
-      : 'Naozaj chcete aktivovať tento rezort?'
+  function openToggleModal(id: string, currentActive: boolean) {
+    setInstitutionToToggle({ id, active: currentActive })
+  }
 
-    if (!confirm(confirmMsg)) return
+  async function handleToggleConfirm() {
+    if (!institutionToToggle) return
+
+    const { id, active: currentActive } = institutionToToggle
+    setInstitutionToToggle(null)
 
     try {
       const res = await fetch(`/api/superadmin/institutions/${id}/toggle-active`, {
@@ -97,10 +104,14 @@ export default function InstitutionsPage() {
       })
 
       if (res.ok) {
+        showSuccess(currentActive ? 'Rezort bol deaktivovaný' : 'Rezort bol aktivovaný')
         fetchInstitutions()
+      } else {
+        showError('Chyba pri zmene stavu rezortu')
       }
     } catch (error) {
       console.error('Error toggling active status:', error)
+      showError('Chyba pri zmene stavu rezortu')
     }
   }
 
@@ -150,7 +161,7 @@ export default function InstitutionsPage() {
       cell: ({ row }) => (
         <div className="flex gap-2">
           <button
-            onClick={() => toggleActive(row.original.id, row.original.active)}
+            onClick={() => openToggleModal(row.original.id, row.original.active)}
             className={`text-xs px-2 py-1 rounded ${
               row.original.active
                 ? 'text-red-600 hover:bg-red-50'
@@ -257,6 +268,22 @@ export default function InstitutionsPage() {
           <DataTable columns={columns} data={institutions} />
         </div>
       )}
+
+      {/* Toggle Active Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!institutionToToggle}
+        title={institutionToToggle?.active ? 'Deaktivovať rezort' : 'Aktivovať rezort'}
+        message={
+          institutionToToggle?.active
+            ? 'Naozaj chcete deaktivovať tento rezort? Admini tohto rezortu sa nebudú môcť prihlásiť.'
+            : 'Naozaj chcete aktivovať tento rezort?'
+        }
+        confirmLabel={institutionToToggle?.active ? 'Deaktivovať' : 'Aktivovať'}
+        cancelLabel="Zrušiť"
+        variant={institutionToToggle?.active ? 'danger' : 'warning'}
+        onConfirm={handleToggleConfirm}
+        onCancel={() => setInstitutionToToggle(null)}
+      />
     </div>
   )
 }
