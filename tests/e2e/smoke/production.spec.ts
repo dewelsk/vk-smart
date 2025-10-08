@@ -31,8 +31,8 @@ test.describe('Production Smoke Tests', () => {
     await page.goto(`${PRODUCTION_URL}/admin/login`)
 
     // Fill login form
-    await page.getByTestId('email-input').fill(process.env.TEST_ADMIN_EMAIL || 'super@retry.sk')
-    await page.getByTestId('password-input').fill(process.env.TEST_ADMIN_PASSWORD || 'heslo123')
+    await page.getByTestId('email-input').fill(process.env.TEST_ADMIN_EMAIL || 'superadmin@retry.sk')
+    await page.getByTestId('password-input').fill(process.env.TEST_ADMIN_PASSWORD || 'Hackaton25')
 
     // Submit
     await page.getByTestId('login-button').click()
@@ -44,8 +44,8 @@ test.describe('Production Smoke Tests', () => {
   test('should load dashboard with stats', async ({ page }) => {
     // Login first
     await page.goto(`${PRODUCTION_URL}/admin/login`)
-    await page.getByTestId('email-input').fill(process.env.TEST_ADMIN_EMAIL || 'super@retry.sk')
-    await page.getByTestId('password-input').fill(process.env.TEST_ADMIN_PASSWORD || 'heslo123')
+    await page.getByTestId('email-input').fill(process.env.TEST_ADMIN_EMAIL || 'superadmin@retry.sk')
+    await page.getByTestId('password-input').fill(process.env.TEST_ADMIN_PASSWORD || 'Hackaton25')
     await page.getByTestId('login-button').click()
 
     // Wait for dashboard
@@ -62,8 +62,8 @@ test.describe('Production Smoke Tests', () => {
   test('should load tests list page', async ({ page }) => {
     // Login
     await page.goto(`${PRODUCTION_URL}/admin/login`)
-    await page.getByTestId('email-input').fill(process.env.TEST_ADMIN_EMAIL || 'super@retry.sk')
-    await page.getByTestId('password-input').fill(process.env.TEST_ADMIN_PASSWORD || 'heslo123')
+    await page.getByTestId('email-input').fill(process.env.TEST_ADMIN_EMAIL || 'superadmin@retry.sk')
+    await page.getByTestId('password-input').fill(process.env.TEST_ADMIN_PASSWORD || 'Hackaton25')
     await page.getByTestId('login-button').click()
     await expect(page).toHaveURL(/\/dashboard/)
 
@@ -88,8 +88,8 @@ test.describe('Production Smoke Tests', () => {
   test('should load practice tests page', async ({ page }) => {
     // Login
     await page.goto(`${PRODUCTION_URL}/admin/login`)
-    await page.getByTestId('email-input').fill(process.env.TEST_ADMIN_EMAIL || 'super@retry.sk')
-    await page.getByTestId('password-input').fill(process.env.TEST_ADMIN_PASSWORD || 'heslo123')
+    await page.getByTestId('email-input').fill(process.env.TEST_ADMIN_EMAIL || 'superadmin@retry.sk')
+    await page.getByTestId('password-input').fill(process.env.TEST_ADMIN_PASSWORD || 'Hackaton25')
     await page.getByTestId('login-button').click()
     await expect(page).toHaveURL(/\/dashboard/)
 
