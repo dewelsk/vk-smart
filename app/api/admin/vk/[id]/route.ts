@@ -146,9 +146,8 @@ export async function GET(
       assignedTests: vk.assignedTests.map((at) => ({
         id: at.id,
         testId: at.testId,
+        level: at.level,
         test: at.test,
-        required: at.required,
-        passingScore: at.passingScore,
       })),
       commission: vk.commission ? {
         id: vk.commission.id,

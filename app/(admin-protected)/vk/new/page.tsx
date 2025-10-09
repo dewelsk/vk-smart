@@ -187,6 +187,7 @@ export default function NewVKPage() {
             <input
               type="text"
               id="identifier"
+              data-testid="identifier-input"
               value={formData.identifier}
               onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
               placeholder="napr. VK/2025/1234"
@@ -194,7 +195,7 @@ export default function NewVKPage() {
                 errors.identifier ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            {errors.identifier && <p className="mt-1 text-sm text-red-600">{errors.identifier}</p>}
+            {errors.identifier && <p className="mt-1 text-sm text-red-600" data-testid="identifier-error">{errors.identifier}</p>}
           </div>
 
           {/* Institution */}
@@ -209,8 +210,9 @@ export default function NewVKPage() {
               placeholder="Vyberte rezort..."
               className="basic-select"
               classNamePrefix="select"
+              inputId="institution-select"
             />
-            {errors.institutionId && <p className="mt-1 text-sm text-red-600">{errors.institutionId}</p>}
+            {errors.institutionId && <p className="mt-1 text-sm text-red-600" data-testid="institution-error">{errors.institutionId}</p>}
           </div>
 
           {/* Selection Type */}
@@ -221,6 +223,7 @@ export default function NewVKPage() {
             <input
               type="text"
               id="selectionType"
+              data-testid="selection-type-input"
               value={formData.selectionType}
               onChange={(e) => setFormData({ ...formData, selectionType: e.target.value })}
               placeholder="napr. Výberové konanie"
@@ -228,7 +231,7 @@ export default function NewVKPage() {
                 errors.selectionType ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            {errors.selectionType && <p className="mt-1 text-sm text-red-600">{errors.selectionType}</p>}
+            {errors.selectionType && <p className="mt-1 text-sm text-red-600" data-testid="selection-type-error">{errors.selectionType}</p>}
           </div>
 
           {/* Organizational Unit */}
@@ -239,13 +242,14 @@ export default function NewVKPage() {
             <input
               type="text"
               id="organizationalUnit"
+              data-testid="organizational-unit-input"
               value={formData.organizationalUnit}
               onChange={(e) => setFormData({ ...formData, organizationalUnit: e.target.value })}
               className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
                 errors.organizationalUnit ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            {errors.organizationalUnit && <p className="mt-1 text-sm text-red-600">{errors.organizationalUnit}</p>}
+            {errors.organizationalUnit && <p className="mt-1 text-sm text-red-600" data-testid="organizational-unit-error">{errors.organizationalUnit}</p>}
           </div>
 
           {/* Service Field */}
@@ -256,13 +260,14 @@ export default function NewVKPage() {
             <input
               type="text"
               id="serviceField"
+              data-testid="service-field-input"
               value={formData.serviceField}
               onChange={(e) => setFormData({ ...formData, serviceField: e.target.value })}
               className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
                 errors.serviceField ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            {errors.serviceField && <p className="mt-1 text-sm text-red-600">{errors.serviceField}</p>}
+            {errors.serviceField && <p className="mt-1 text-sm text-red-600" data-testid="service-field-error">{errors.serviceField}</p>}
           </div>
 
           {/* Position */}
@@ -273,13 +278,14 @@ export default function NewVKPage() {
             <input
               type="text"
               id="position"
+              data-testid="position-input"
               value={formData.position}
               onChange={(e) => setFormData({ ...formData, position: e.target.value })}
               className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
                 errors.position ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            {errors.position && <p className="mt-1 text-sm text-red-600">{errors.position}</p>}
+            {errors.position && <p className="mt-1 text-sm text-red-600" data-testid="position-error">{errors.position}</p>}
           </div>
 
           {/* Service Type */}
@@ -290,13 +296,14 @@ export default function NewVKPage() {
             <input
               type="text"
               id="serviceType"
+              data-testid="service-type-input"
               value={formData.serviceType}
               onChange={(e) => setFormData({ ...formData, serviceType: e.target.value })}
               className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
                 errors.serviceType ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            {errors.serviceType && <p className="mt-1 text-sm text-red-600">{errors.serviceType}</p>}
+            {errors.serviceType && <p className="mt-1 text-sm text-red-600" data-testid="service-type-error">{errors.serviceType}</p>}
           </div>
 
           {/* Date */}
@@ -307,13 +314,14 @@ export default function NewVKPage() {
             <input
               type="date"
               id="date"
+              data-testid="date-input"
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
               className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
                 errors.date ? 'border-red-500' : 'border-gray-300'
               }`}
             />
-            {errors.date && <p className="mt-1 text-sm text-red-600">{errors.date}</p>}
+            {errors.date && <p className="mt-1 text-sm text-red-600" data-testid="date-error">{errors.date}</p>}
           </div>
 
           {/* Number of Positions */}
@@ -355,6 +363,7 @@ export default function NewVKPage() {
             <button
               type="submit"
               disabled={loading}
+              data-testid="submit-button"
               className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Vytváram...' : 'Vytvoriť VK'}

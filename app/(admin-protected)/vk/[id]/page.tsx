@@ -11,12 +11,14 @@ import {
   ClipboardDocumentListIcon,
   UserGroupIcon,
   UserPlusIcon,
-  TrashIcon
+  TrashIcon,
+  AcademicCapIcon
 } from '@heroicons/react/24/outline'
 import { ValidationStatusCard } from '@/components/vk/ValidationStatusCard'
 import { AddCommissionMemberModal } from '@/components/vk/AddCommissionMemberModal'
 import { GestorSelectModal } from '@/components/vk/GestorSelectModal'
 import { AddCandidateModal } from '@/components/vk/AddCandidateModal'
+import { TestsTab } from '@/components/vk/TestsTab'
 import { DataTable } from '@/components/table/DataTable'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { ValidationIssue } from '@/lib/vk-validation'
@@ -104,7 +106,7 @@ type ValidationData = {
   isReady: boolean
 }
 
-type TabType = 'overview' | 'commission' | 'candidates'
+type TabType = 'overview' | 'commission' | 'candidates' | 'tests'
 
 export default function VKDetailPage() {
   const router = useRouter()
@@ -121,7 +123,7 @@ export default function VKDetailPage() {
   // Read active tab from URL
   useEffect(() => {
     const tab = searchParams.get('tab') as TabType
-    if (tab && ['overview', 'commission', 'candidates'].includes(tab)) {
+    if (tab && ['overview', 'commission', 'candidates', 'tests'].includes(tab)) {
       setActiveTab(tab)
     }
   }, [searchParams])
@@ -192,7 +194,7 @@ export default function VKDetailPage() {
           <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
         </Link>
         <div className="flex-1">
-          <h1 id="vk-detail-title" className="text-3xl font-bold text-gray-900">{vk.identifier}</h1>
+          <h1 id="vk-detail-title" data-testid="vk-identifier" className="text-3xl font-bold text-gray-900">{vk.identifier}</h1>
           <p className="mt-1 text-gray-600">{vk.position}</p>
         </div>
         <StatusBadge status={vk.status} />
@@ -254,6 +256,21 @@ export default function VKDetailPage() {
               <UserPlusIcon className="h-5 w-5 inline-block mr-2" />
               Uchádzači
             </button>
+            <button
+              id="tests-tab"
+              onClick={() => changeTab('tests')}
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
+                ${activeTab === 'tests'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+              data-testid="tests-tab"
+            >
+              <AcademicCapIcon className="h-5 w-5 inline-block mr-2" />
+              Testy
+            </button>
           </nav>
         </div>
 
@@ -261,6 +278,7 @@ export default function VKDetailPage() {
           {activeTab === 'overview' && <OverviewTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
           {activeTab === 'commission' && <CommissionTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
           {activeTab === 'candidates' && <CandidatesTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
+          {activeTab === 'tests' && <TestsTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
         </div>
       </div>
     </div>

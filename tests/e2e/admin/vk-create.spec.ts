@@ -38,27 +38,32 @@ test.describe('VK Create @admin @vk @critical', () => {
   test('should create new VK successfully', async ({ page }) => {
     const timestamp = Date.now()
 
-    // Fill form
-    await page.fill('input[name="identifier"]', `VK-TEST-${timestamp}`)
+    // Fill form using data-testid
+    await page.getByTestId('identifier-input').fill(`VK-TEST-${timestamp}`)
 
-    // Select institution (rezort)
-    await page.click('text=Vyber rezort...')
+    // Select institution (rezort) - using inputId
+    await page.locator('#institution-select').click()
     await page.keyboard.press('ArrowDown')
     await page.keyboard.press('Enter')
     await page.keyboard.press('Escape')
 
-    await page.fill('input[name="selectionType"]', 'Výberové konanie')
-    await page.fill('input[name="organizationalUnit"]', 'Test Unit')
-    await page.fill('input[name="serviceField"]', 'Test Field')
-    await page.fill('input[name="position"]', 'Test Position')
-    await page.fill('input[name="serviceType"]', 'Test Type')
-    await page.fill('input[name="date"]', '2025-12-31')
+    await page.getByTestId('selection-type-input').fill('Výberové konanie')
+    await page.getByTestId('organizational-unit-input').fill('Test Unit')
+    await page.getByTestId('service-field-input').fill('Test Field')
+    await page.getByTestId('position-input').fill('Test Position')
+    await page.getByTestId('service-type-input').fill('Test Type')
+    await page.getByTestId('date-input').fill('2025-12-31')
 
     // Submit form
-    await page.click('button:has-text("Vytvoriť VK")')
+    await page.getByTestId('submit-button').click()
 
-    // Should redirect to VK detail or list
-    await page.waitForURL(/\/vk/, { timeout: 10000 })
+    // Should redirect to VK detail
+    await page.waitForURL(/\/vk\/[a-z0-9]+$/, { timeout: 10000 })
+
+    // Verify we're on VK detail page
+    await page.waitForLoadState('networkidle')
+    const pageText = await page.textContent('body')
+    expect(pageText).toContain('VK')
   })
 
   test('should cancel VK creation', async ({ page }) => {
