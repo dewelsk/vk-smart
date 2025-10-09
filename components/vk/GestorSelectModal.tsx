@@ -55,7 +55,7 @@ export function GestorSelectModal({
 
   async function fetchGestorUsers() {
     try {
-      const res = await fetch('/api/admin/users?role=GESTOR&status=active')
+      const res = await fetch('/api/admin/users?roles=GESTOR&status=active')
       const data = await res.json()
 
       if (data.users) {
