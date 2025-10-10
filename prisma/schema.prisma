@@ -125,6 +125,7 @@ model User {
   auditLogs     AuditLog[]
   testResults   TestResult[]
   practiceTestResults PracticeTestResult[]
+  securitySettingsUpdates SecuritySettings[] @relation("SecuritySettingsUpdatedBy")
 
   @@map("users")
 }
@@ -539,6 +540,19 @@ model CandidateAttachment {
 
   @@index([candidateId, vkId], map: "idx_candidate_attachment_candidate_vk")
   @@map("candidate_attachments")
+}
+
+model SecuritySettings {
+  id                   String   @id @default(cuid())
+  maxFailedAttempts    Int      @default(5)
+  blockDurationMinutes Int      @default(15)
+  blockWindowMinutes   Int      @default(15)
+  updatedById          String?
+  updatedBy            User?    @relation("SecuritySettingsUpdatedBy", fields: [updatedById], references: [id])
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("security_settings")
 }
 
 model GeneratedDocument {

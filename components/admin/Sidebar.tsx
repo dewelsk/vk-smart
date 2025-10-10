@@ -14,6 +14,7 @@ import {
   XMarkIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline'
 import type { Session } from 'next-auth'
 
@@ -52,6 +53,7 @@ export default function Sidebar({ session }: SidebarProps) {
         { name: 'Precvičovanie', href: '/tests/practice' },
       ]
     },
+    { name: 'Nastavenia', href: '/settings', icon: Cog6ToothIcon, roles: ['SUPERADMIN'] },
   ]
 
   // Filter navigation based on user role
