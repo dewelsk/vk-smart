@@ -13,6 +13,13 @@ export type User = {
   lastLoginAt: string | null
   passwordSetToken: string | null
   institutions: Array<{ id: string; code: string; name: string }>
+  roles: Array<{
+    id: string
+    role: string
+    institutionId: string | null
+    institutionName: string | null
+    assignedAt: string
+  }>
   vkCount: number
 }
 

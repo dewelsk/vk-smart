@@ -34,7 +34,7 @@ export function ConfirmModal({
     : 'text-yellow-600'
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" data-testid="confirm-modal">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4">
@@ -43,16 +43,17 @@ export function ConfirmModal({
               <ExclamationTriangleIcon className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-gray-900" data-testid="confirm-modal-title">
                 {title}
               </h3>
-              <p className="mt-2 text-sm text-gray-600">
+              <p className="mt-2 text-sm text-gray-600" data-testid="confirm-modal-message">
                 {message}
               </p>
             </div>
           </div>
           <button
             onClick={onCancel}
+            data-testid="confirm-modal-close-button"
             className="text-gray-400 hover:text-gray-500 flex-shrink-0"
           >
             <XMarkIcon className="h-6 w-6" />
@@ -63,12 +64,14 @@ export function ConfirmModal({
         <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
           <button
             onClick={onCancel}
+            data-testid="confirm-modal-cancel-button"
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
           >
             {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
+            data-testid="confirm-modal-confirm-button"
             className={`px-4 py-2 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${confirmButtonClass}`}
           >
             {confirmLabel}

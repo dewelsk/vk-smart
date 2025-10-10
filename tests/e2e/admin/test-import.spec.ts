@@ -476,4 +476,152 @@ test.describe('Admin - Test Import', () => {
     })
   })
 
+  test.describe('Question-level Question Types', () => {
+    test('should display questionType select for each question', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      // Wait for questions to load
+      await expect(page.getByTestId('questions-section')).toBeVisible({ timeout: 10000 })
+
+      // Check that first question has questionType select
+      const firstQuestionTypeSelect = page.getByTestId('question-type-select-0')
+      await expect(firstQuestionTypeSelect).toBeVisible()
+
+      // Should have default value of SINGLE_CHOICE
+      const selectedValue = await firstQuestionTypeSelect.inputValue()
+      expect(selectedValue).toBe('SINGLE_CHOICE')
+    })
+
+    test('should change questionType for a question', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      await expect(page.getByTestId('questions-section')).toBeVisible({ timeout: 10000 })
+
+      // Enable MULTIPLE_CHOICE at test level first
+      await page.getByTestId('question-type-multiple_choice').click()
+
+      // Change first question's type to MULTIPLE_CHOICE
+      const firstQuestionTypeSelect = page.getByTestId('question-type-select-0')
+      await firstQuestionTypeSelect.selectOption('MULTIPLE_CHOICE')
+
+      // Verify it changed
+      const selectedValue = await firstQuestionTypeSelect.inputValue()
+      expect(selectedValue).toBe('MULTIPLE_CHOICE')
+    })
+
+    test('should only show allowed question types in select', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      await expect(page.getByTestId('questions-section')).toBeVisible({ timeout: 10000 })
+
+      // By default, only SINGLE_CHOICE is allowed
+      const firstQuestionTypeSelect = page.getByTestId('question-type-select-0')
+
+      // Get all options
+      const options = await firstQuestionTypeSelect.locator('option').allTextContents()
+
+      // Should only have 1 option (SINGLE_CHOICE)
+      expect(options.length).toBe(1)
+      expect(options[0]).toContain('Jednovýberová')
+
+      // Now enable MULTIPLE_CHOICE at test level
+      await page.getByTestId('question-type-multiple_choice').click()
+
+      // Should now have 2 options
+      const newOptions = await firstQuestionTypeSelect.locator('option').allTextContents()
+      expect(newOptions.length).toBe(2)
+    })
+
+    test('should preserve questionType when editing question in modal', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      await expect(page.getByTestId('questions-section')).toBeVisible({ timeout: 10000 })
+
+      // Enable MULTIPLE_CHOICE at test level
+      await page.getByTestId('question-type-multiple_choice').click()
+
+      // Change first question's type to MULTIPLE_CHOICE
+      const firstQuestionTypeSelect = page.getByTestId('question-type-select-0')
+      await firstQuestionTypeSelect.selectOption('MULTIPLE_CHOICE')
+
+      // Open edit modal
+      const editButton = page.getByTestId('edit-question-button').first()
+      await editButton.click()
+
+      // Modal should show MULTIPLE_CHOICE selected
+      const modalQuestionTypeSelect = page.getByTestId('edit-question-type')
+      await expect(modalQuestionTypeSelect).toBeVisible()
+      const modalSelectedValue = await modalQuestionTypeSelect.inputValue()
+      expect(modalSelectedValue).toBe('MULTIPLE_CHOICE')
+
+      // Change it to SINGLE_CHOICE in modal
+      await modalQuestionTypeSelect.selectOption('SINGLE_CHOICE')
+
+      // Save
+      await page.getByTestId('save-edit-button').click()
+
+      // Verify it changed in the list view too
+      const updatedValue = await firstQuestionTypeSelect.inputValue()
+      expect(updatedValue).toBe('SINGLE_CHOICE')
+    })
+
+    test('should filter modal question type options by test allowedQuestionTypes', async ({ page }) => {
+      await page.goto('/tests/import')
+
+      const fileInput = page.locator('input[type="file"]')
+      const testFilePath = path.join(__dirname, '../../../zadanie/testy/dummy_test_VK_2025.docx')
+      await fileInput.setInputFiles(testFilePath)
+
+      await page.waitForTimeout(3000)
+
+      await expect(page.getByTestId('questions-section')).toBeVisible({ timeout: 10000 })
+
+      // Open edit modal with only SINGLE_CHOICE allowed
+      const editButton = page.getByTestId('edit-question-button').first()
+      await editButton.click()
+
+      // Modal question type select should only show SINGLE_CHOICE
+      const modalQuestionTypeSelect = page.getByTestId('edit-question-type')
+      const options = await modalQuestionTypeSelect.locator('option').allTextContents()
+      expect(options.length).toBe(1)
+
+      // Cancel and close modal
+      await page.getByTestId('cancel-edit-button').click()
+
+      // Enable TRUE_FALSE at test level
+      await page.getByTestId('question-type-true_false').click()
+
+      // Open modal again
+      await editButton.click()
+
+      // Should now have 2 options
+      const newOptions = await modalQuestionTypeSelect.locator('option').allTextContents()
+      expect(newOptions.length).toBe(2)
+    })
+  })
+
 })

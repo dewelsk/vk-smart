@@ -1,33 +1,35 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import Select from 'react-select'
-import { ArrowLeftIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { useToast } from '@/components/Toast'
+import { useSession } from 'next-auth/react'
+import { toast } from 'react-hot-toast'
+import { ArrowLeftIcon, PlusIcon, TrashIcon, UserCircleIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
+import { UserRole } from '@prisma/client'
+import { RoleBadge } from '@/components/RoleBadge'
+import { RoleAssignmentModal } from '@/components/RoleAssignmentModal'
 import { ConfirmModal } from '@/components/ConfirmModal'
 
 type Institution = {
   id: string
   code: string
   name: string
+  assignedAt: string
 }
 
-type InstitutionOption = {
-  value: string
-  label: string
-}
-
-type RoleOption = {
-  value: string
-  label: string
+type RoleAssignment = {
+  id: string
+  role: UserRole
+  institutionId: string | null
+  institutionName: string | null
+  assignedAt: string
+  assignedBy: string | null
 }
 
 type VK = {
   id: string
   identifier: string
-  position: string
   status: string
 }
 
@@ -37,185 +39,102 @@ type User = {
   surname: string
   email: string | null
   username: string
-  role: string
+  role: UserRole
   active: boolean
   note: string | null
-  createdAt: string
-  lastLoginAt: string | null
+  otpEnabled: boolean
+  temporaryAccount: boolean
   passwordSetToken: string | null
+  createdAt: string
+  updatedAt: string
+  lastLoginAt: string | null
   institutions: Institution[]
-  vks: VK[]
+  roles: RoleAssignment[]
+  vkCount: number
+  recentVKs: VK[]
 }
 
-const roleOptions: RoleOption[] = [
-  { value: 'SUPERADMIN', label: 'Superadmin' },
-  { value: 'ADMIN', label: 'Admin' },
-  { value: 'GESTOR', label: 'Gestor' },
-  { value: 'KOMISIA', label: 'Komisia' },
-]
+type TabType = 'overview' | 'roles'
 
 export default function UserDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
+  const { data: session } = useSession()
   const userId = params.id as string
-  const { showSuccess, showError } = useToast()
 
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [user, setUser] = useState<User | null>(null)
-  const [institutions, setInstitutions] = useState<InstitutionOption[]>([])
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [formData, setFormData] = useState({
-    name: '',
-    surname: '',
-    email: '',
-    role: null as RoleOption | null,
-    note: '',
-    active: true,
-    institutionIds: [] as InstitutionOption[],
-  })
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [activeTab, setActiveTab] = useState<TabType>('overview')
+  const [showRoleModal, setShowRoleModal] = useState(false)
+  const [roleToDelete, setRoleToDelete] = useState<RoleAssignment | null>(null)
+
+  // Read active tab from URL
+  useEffect(() => {
+    const tab = searchParams?.get('tab') as TabType
+    if (tab && ['overview', 'roles'].includes(tab)) {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     fetchUser()
-    fetchInstitutions()
   }, [userId])
 
   async function fetchUser() {
+    setLoading(true)
     try {
       const res = await fetch(`/api/admin/users/${userId}`)
       const data = await res.json()
 
-      if (data.user) {
-        setUser(data.user)
-
-        // Find the matching role option, or create a fallback if not found
-        let roleOption = roleOptions.find(r => r.value === data.user.role)
-
-        // If role not found in options, create a custom option with the actual role value
-        if (!roleOption) {
-          roleOption = { value: data.user.role, label: data.user.role }
-        }
-        setFormData({
-          name: data.user.name,
-          surname: data.user.surname,
-          email: data.user.email || '',
-          role: roleOption,
-          note: data.user.note || '',
-          active: data.user.active,
-          institutionIds: data.user.institutions.map((inst: Institution) => ({
-            value: inst.id,
-            label: `${inst.code} - ${inst.name}`,
-          })),
-        })
+      if (!res.ok) {
+        toast.error(data.error || 'Chyba pri načítaní používateľa')
+        return
       }
+
+      setUser(data.user)
     } catch (error) {
       console.error('Failed to fetch user:', error)
+      toast.error('Chyba pri načítaní používateľa')
     } finally {
       setLoading(false)
     }
   }
 
-  async function fetchInstitutions() {
-    try {
-      const res = await fetch('/api/admin/institutions')
-      const data = await res.json()
-
-      if (data.institutions) {
-        const options: InstitutionOption[] = data.institutions.map((inst: Institution) => ({
-          value: inst.id,
-          label: `${inst.code} - ${inst.name}`,
-        }))
-        setInstitutions(options)
-      }
-    } catch (error) {
-      console.error('Failed to fetch institutions:', error)
-    }
+  function changeTab(tab: TabType) {
+    setActiveTab(tab)
+    router.push(`/users/${userId}?tab=${tab}`, { scroll: false })
   }
 
-  function validate() {
-    const newErrors: Record<string, string> = {}
-
-    if (!formData.name.trim()) newErrors.name = 'Meno je povinné'
-    if (!formData.surname.trim()) newErrors.surname = 'Priezvisko je povinné'
-
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Neplatný formát emailu'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-
-    if (!validate()) return
-    if (!formData.role) return
-
-    setSaving(true)
-    setErrors({})
-
+  async function handleDeleteRole(roleAssignment: RoleAssignment) {
+    const toastId = toast.loading('Odstraňujem rolu...')
     try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          surname: formData.surname,
-          email: formData.email || null,
-          role: formData.role.value,
-          note: formData.note || null,
-          active: formData.active,
-          institutionIds: formData.institutionIds.map(i => i.value),
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setErrors({ general: data.error || 'Chyba pri aktualizácii používateľa' })
-        return
-      }
-
-      // Success - refresh data
-      await fetchUser()
-    } catch (error) {
-      console.error('Failed to update user:', error)
-      setErrors({ general: 'Chyba pri aktualizácii používateľa' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleDeleteConfirm() {
-    setShowDeleteConfirm(false)
-
-    try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
+      const res = await fetch(`/api/admin/users/${userId}/roles/${roleAssignment.id}`, {
         method: 'DELETE',
       })
 
+      const data = await res.json()
+
       if (!res.ok) {
-        const data = await res.json()
-        showError(data.error || 'Chyba pri odstraňovaní používateľa')
+        toast.dismiss(toastId)
+        toast.error(data.error || 'Nepodarilo sa odstrániť rolu')
         return
       }
 
-      // Success - redirect to list
-      showSuccess('Používateľ bol úspešne odstránený')
-      router.push('/users')
+      toast.dismiss(toastId)
+      toast.success('Rola bola úspešne odstránená')
+      setRoleToDelete(null)
+      fetchUser() // Refresh data
     } catch (error) {
-      console.error('Failed to delete user:', error)
-      showError('Chyba pri odstraňovaní používateľa')
+      console.error('Failed to delete role:', error)
+      toast.dismiss(toastId)
+      toast.error('Nepodarilo sa odstrániť rolu')
     }
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div data-testid="user-detail-loading" className="flex justify-center items-center h-64">
         <div className="text-gray-500">Načítavam...</div>
       </div>
     )
@@ -223,56 +142,183 @@ export default function UserDetailPage() {
 
   if (!user) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">Používateľ nenájdený</p>
-        <Link href="/users" className="text-blue-600 hover:text-blue-800 mt-4 inline-block">
-          Späť na zoznam
-        </Link>
+      <div data-testid="user-not-found" className="text-center py-12">
+        <h3 className="text-lg font-medium text-gray-900">Používateľ nenájdený</h3>
+        <div className="mt-6">
+          <Link
+            href="/users"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+          >
+            <ArrowLeftIcon className="h-4 w-4" />
+            Späť na zoznam
+          </Link>
+        </div>
       </div>
     )
   }
 
+  const canManageRoles = session?.user?.role === 'SUPERADMIN' || session?.user?.role === 'ADMIN'
+
   return (
-    <div className="space-y-6" data-testid="user-detail-page">
+    <div data-testid="user-detail-page" className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/users"
-            data-testid="back-button"
-            className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-          >
-            <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
-          </Link>
-          <div>
-            <h1 data-testid="user-name" className="text-3xl font-bold text-gray-900">
-              {user.name} {user.surname}
-            </h1>
-            <p data-testid="user-subtitle" className="mt-2 text-gray-600">
-              {user.username} • {user.role}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+      <div className="flex items-center gap-4">
+        <Link
+          href="/users"
+          data-testid="back-to-list-link"
+          className="p-2 hover:bg-gray-100 rounded-md transition-colors"
         >
-          <TrashIcon className="h-5 w-5" />
-          Odstrániť
-        </button>
+          <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
+        </Link>
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold text-gray-900" data-testid="user-name">
+            {user.name} {user.surname}
+          </h1>
+          <p className="mt-1 text-gray-600" data-testid="user-username">
+            {user.username}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {user.active ? (
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800" data-testid="status-badge">
+              Aktívny
+            </span>
+          ) : (
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800" data-testid="status-badge">
+              Neaktívny
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* User Info */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Informácie</h2>
-        <dl className="grid grid-cols-2 gap-4">
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Vytvorené</dt>
+      {/* Tabs */}
+      <div className="bg-white rounded-lg shadow">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8 px-6" aria-label="Tabs">
+            <button
+              onClick={() => changeTab('overview')}
+              data-testid="overview-tab"
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap inline-flex items-center gap-2
+                ${activeTab === 'overview'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+            >
+              <UserCircleIcon className="h-5 w-5" />
+              Prehľad
+            </button>
+            <button
+              onClick={() => changeTab('roles')}
+              data-testid="roles-tab"
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap inline-flex items-center gap-2
+                ${activeTab === 'roles'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+            >
+              <ShieldCheckIcon className="h-5 w-5" />
+              Role ({user.roles.length})
+            </button>
+          </nav>
+        </div>
+
+        <div className="p-6">
+          {activeTab === 'overview' && (
+            <OverviewTab user={user} />
+          )}
+          {activeTab === 'roles' && (
+            <RolesTab
+              user={user}
+              canManageRoles={canManageRoles}
+              onAddRole={() => setShowRoleModal(true)}
+              onDeleteRole={(role) => setRoleToDelete(role)}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Role Assignment Modal */}
+      {canManageRoles && (
+        <RoleAssignmentModal
+          userId={userId}
+          currentUserRole={session?.user?.role as UserRole}
+          isOpen={showRoleModal}
+          onClose={() => setShowRoleModal(false)}
+          onSuccess={() => {
+            fetchUser()
+            setShowRoleModal(false)
+          }}
+        />
+      )}
+
+      {/* Delete Role Confirmation Modal */}
+      {roleToDelete && (
+        <ConfirmModal
+          isOpen={true}
+          title="Odstrániť rolu"
+          message={`Naozaj chcete odstrániť rolu "${roleToDelete.role}"${roleToDelete.institutionName ? ` pre inštitúciu "${roleToDelete.institutionName}"` : ''}?`}
+          confirmLabel="Odstrániť"
+          cancelLabel="Zrušiť"
+          variant="danger"
+          onConfirm={() => handleDeleteRole(roleToDelete)}
+          onCancel={() => setRoleToDelete(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Overview Tab Component
+function OverviewTab({ user }: { user: User }) {
+  return (
+    <div className="space-y-6" data-testid="overview-content">
+      {/* Basic Information */}
+      <div>
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Základné informácie</h3>
+        <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div data-testid="field-name">
+            <dt className="text-sm font-medium text-gray-500">Meno</dt>
+            <dd className="mt-1 text-sm text-gray-900">{user.name}</dd>
+          </div>
+          <div data-testid="field-surname">
+            <dt className="text-sm font-medium text-gray-500">Priezvisko</dt>
+            <dd className="mt-1 text-sm text-gray-900">{user.surname}</dd>
+          </div>
+          <div data-testid="field-email">
+            <dt className="text-sm font-medium text-gray-500">Email</dt>
+            <dd className="mt-1 text-sm text-gray-900">{user.email || '-'}</dd>
+          </div>
+          <div data-testid="field-phone">
+            <dt className="text-sm font-medium text-gray-500">Telefón</dt>
+            <dd className="mt-1 text-sm text-gray-900">{user.phone || '-'}</dd>
+          </div>
+          <div data-testid="field-username">
+            <dt className="text-sm font-medium text-gray-500">Používateľské meno</dt>
+            <dd className="mt-1 text-sm text-gray-900">{user.username}</dd>
+          </div>
+          <div data-testid="field-primary-role">
+            <dt className="text-sm font-medium text-gray-500">Primárna rola</dt>
+            <dd className="mt-1">
+              <RoleBadge role={user.role} size="sm" />
+            </dd>
+          </div>
+          <div data-testid="field-active">
+            <dt className="text-sm font-medium text-gray-500">Stav</dt>
+            <dd className="mt-1 text-sm text-gray-900">
+              {user.active ? 'Aktívny' : 'Neaktívny'}
+            </dd>
+          </div>
+          <div data-testid="field-created">
+            <dt className="text-sm font-medium text-gray-500">Vytvorený</dt>
             <dd className="mt-1 text-sm text-gray-900">
               {new Date(user.createdAt).toLocaleDateString('sk-SK')}
             </dd>
           </div>
-          <div>
+          <div data-testid="field-last-login">
             <dt className="text-sm font-medium text-gray-500">Posledné prihlásenie</dt>
             <dd className="mt-1 text-sm text-gray-900">
               {user.lastLoginAt
@@ -280,203 +326,152 @@ export default function UserDetailPage() {
                 : 'Nikdy'}
             </dd>
           </div>
-          <div>
-            <dt className="text-sm font-medium text-gray-500">Stav</dt>
-            <dd className="mt-1">
-              {user.passwordSetToken ? (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                  Čaká na heslo
-                </span>
-              ) : user.active ? (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Aktívny
-                </span>
-              ) : (
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                  Neaktívny
-                </span>
-              )}
-            </dd>
-          </div>
         </dl>
-
-        {/* VKs */}
-        {user.vks && user.vks.length > 0 && (
-          <div className="mt-6">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Výberové konania ({user.vks.length})</h3>
-            <ul className="space-y-2">
-              {user.vks.map((vk) => (
-                <li key={vk.id} className="text-sm">
-                  <Link
-                    href={`/vk/${vk.id}`}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    {vk.identifier} - {vk.position}
-                  </Link>
-                  <span className="ml-2 text-gray-500">({vk.status})</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
 
-      {/* Edit Form */}
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow">
-        <h2 className="text-lg font-semibold text-gray-900 mb-6">Upraviť používateľa</h2>
-
-        <div className="space-y-6">
-          {/* General Error */}
-          {errors.general && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {errors.general}
+      {/* Institution - Single rezort only */}
+      {user.institutions && user.institutions.length > 0 && (
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Rezort</h3>
+          <div className="p-4 border border-gray-200 rounded-md bg-gray-50" data-testid="institution-info">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">{user.institutions[0].name}</p>
+                <p className="text-xs text-gray-500">{user.institutions[0].code}</p>
+              </div>
+              <span className="text-xs text-gray-400">
+                Priradené: {new Date(user.institutions[0].assignedAt).toLocaleDateString('sk-SK')}
+              </span>
             </div>
-          )}
-
-          {/* Name */}
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-              Meno <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
-                errors.name ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
-          </div>
-
-          {/* Surname */}
-          <div>
-            <label htmlFor="surname" className="block text-sm font-medium text-gray-700 mb-2">
-              Priezvisko <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              id="surname"
-              value={formData.surname}
-              onChange={(e) => setFormData({ ...formData, surname: e.target.value })}
-              className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
-                errors.surname ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.surname && <p className="mt-1 text-sm text-red-600">{errors.surname}</p>}
-          </div>
-
-          {/* Email */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
-                errors.email ? 'border-red-500' : 'border-gray-300'
-              }`}
-            />
-            {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
-          </div>
-
-          {/* Role */}
-          <div data-testid="role-field">
-            <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
-              Rola
-            </label>
-            <Select
-              inputId="role-select"
-              value={formData.role}
-              onChange={(selected) => setFormData({ ...formData, role: selected })}
-              options={roleOptions}
-              className="basic-select"
-              classNamePrefix="select"
-              isLoading={!formData.role}
-              placeholder={!formData.role ? "Načítavam..." : "Vyberte rolu"}
-            />
-          </div>
-
-          {/* Active */}
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="active"
-              checked={formData.active}
-              onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="active" className="ml-2 block text-sm text-gray-700">
-              Aktívny používateľ
-            </label>
-          </div>
-
-          {/* Institutions */}
-          <div>
-            <label htmlFor="institutions" className="block text-sm font-medium text-gray-700 mb-2">
-              Rezorty
-            </label>
-            <Select
-              isMulti
-              value={formData.institutionIds}
-              onChange={(selected) =>
-                setFormData({ ...formData, institutionIds: selected as InstitutionOption[] })
-              }
-              options={institutions}
-              placeholder="Vyberte rezorty..."
-              className="basic-multi-select"
-              classNamePrefix="select"
-            />
-          </div>
-
-          {/* Note */}
-          <div>
-            <label htmlFor="note" className="block text-sm font-medium text-gray-700 mb-2">
-              Poznámka
-            </label>
-            <textarea
-              id="note"
-              rows={4}
-              value={formData.note}
-              onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          {/* Buttons */}
-          <div className="flex gap-4 pt-4">
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Ukladám...' : 'Uložiť zmeny'}
-            </button>
-            <Link
-              href="/users"
-              className="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-            >
-              Zrušiť
-            </Link>
           </div>
         </div>
-      </form>
+      )}
 
-      {/* Delete Confirmation Modal */}
-      <ConfirmModal
-        isOpen={showDeleteConfirm}
-        title="Odstrániť používateľa"
-        message="Naozaj chcete odstrániť tohto používateľa? Táto akcia je nevratná."
-        confirmLabel="Odstrániť"
-        cancelLabel="Zrušiť"
-        variant="danger"
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+      {/* Note */}
+      {user.note && (
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Poznámka</h3>
+          <div className="p-4 border border-gray-200 rounded-md bg-gray-50" data-testid="user-note">
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{user.note}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Recent VKs */}
+      {user.recentVKs && user.recentVKs.length > 0 && (
+        <div>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Najnovšie VK ({user.vkCount})
+          </h3>
+          <div className="space-y-2" data-testid="vks-list">
+            {user.recentVKs.map((vk) => (
+              <div key={vk.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-md">
+                <Link
+                  href={`/vk/${vk.id}`}
+                  className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                >
+                  {vk.identifier}
+                </Link>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  {vk.status}
+                </span>
+              </div>
+            ))}
+          </div>
+          {user.vkCount > user.recentVKs.length && (
+            <p className="mt-2 text-xs text-gray-500">
+              + ďalších {user.vkCount - user.recentVKs.length} VK
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Note */}
+      {user.note && (
+        <div data-testid="field-note">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Poznámka</h3>
+          <p className="text-sm text-gray-700 p-4 bg-gray-50 rounded-md border border-gray-200">
+            {user.note}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Roles Tab Component
+function RolesTab({
+  user,
+  canManageRoles,
+  onAddRole,
+  onDeleteRole,
+}: {
+  user: User
+  canManageRoles: boolean
+  onAddRole: () => void
+  onDeleteRole: (role: RoleAssignment) => void
+}) {
+  return (
+    <div className="space-y-6" data-testid="roles-content">
+      {/* Header with Add Button */}
+      {canManageRoles && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium text-gray-900">Priradené role</h3>
+          <button
+            onClick={onAddRole}
+            data-testid="add-role-button"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <PlusIcon className="h-4 w-4" />
+            Pridať rolu
+          </button>
+        </div>
+      )}
+
+      {/* Roles List */}
+      {user.roles.length === 0 ? (
+        <div className="text-center py-12 text-gray-500" data-testid="no-roles-message">
+          Používateľ nemá priradené žiadne role
+        </div>
+      ) : (
+        <div className="space-y-3" data-testid="roles-list">
+          {user.roles.map((roleAssignment) => (
+            <div
+              key={roleAssignment.id}
+              data-testid={`role-item-${roleAssignment.id}`}
+              className="flex items-center justify-between p-4 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <RoleBadge
+                  role={roleAssignment.role}
+                  institutionName={roleAssignment.institutionName}
+                  size="md"
+                />
+                <div className="text-sm text-gray-500">
+                  Priradené: {new Date(roleAssignment.assignedAt).toLocaleDateString('sk-SK')}
+                </div>
+              </div>
+              {canManageRoles && (
+                <button
+                  onClick={() => onDeleteRole(roleAssignment)}
+                  data-testid={`delete-role-${roleAssignment.id}`}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  title="Odstrániť rolu"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Info Note */}
+      <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+        <p className="text-sm text-blue-800">
+          ℹ️ Používateľ môže mať priradenú jednu alebo viac rolí.
+        </p>
+      </div>
     </div>
   )
 }

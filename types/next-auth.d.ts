@@ -14,6 +14,11 @@ declare module 'next-auth' {
       code: string
       name: string
     }>
+    roles: Array<{
+      role: UserRole
+      institutionId: string | null
+      institutionName: string | null
+    }>
   }
 
   interface Session {
@@ -25,6 +30,11 @@ declare module 'next-auth' {
         id: string
         code: string
         name: string
+      }>
+      roles: Array<{
+        role: UserRole
+        institutionId: string | null
+        institutionName: string | null
       }>
     } & DefaultSession['user']
   }
@@ -39,6 +49,11 @@ declare module 'next-auth/jwt' {
       id: string
       code: string
       name: string
+    }>
+    roles: Array<{
+      role: UserRole
+      institutionId: string | null
+      institutionName: string | null
     }>
   }
 }

@@ -33,15 +33,16 @@ model Institution {
 
   active      Boolean  @default(true)
 
-  // Generated search columns for diacritic-insensitive search
-  name_search        String? @map("name_search")
-  code_search        String? @map("code_search")
-  description_search String? @map("description_search")
+  // Generated search columns (managed by PostgreSQL triggers, ignored by Prisma)
+  name_search        String? @ignore
+  code_search        String? @ignore
+  description_search String? @ignore
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   users       UserInstitution[]
+  userRoles   UserRoleAssignment[]
   vks         VyberoveKonanie[]
 
   @@map("institutions")
@@ -64,6 +65,26 @@ model UserInstitution {
   @@map("user_institutions")
 }
 
+// M:N join table pre User <-> Role (s možnosťou inštitucionálnej väzby)
+model UserRoleAssignment {
+  id            String   @id @default(cuid())
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role          UserRole
+
+  // Optional institution binding (null = global role)
+  institutionId String?
+  institution   Institution? @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  assignedAt    DateTime @default(now())
+  assignedBy    String?  // ID užívateľa, ktorý pridelil rolu
+
+  @@unique([userId, role, institutionId])
+  @@map("user_role_assignments")
+}
+
 // User model - Trvalé účty (Superadmin, Admin, Gestor, Komisia)
 model User {
   id            String   @id @default(cuid())
@@ -72,6 +93,7 @@ model User {
   password      String?
   name          String
   surname       String
+  phone         String?
   role          UserRole
   note          String?
 
@@ -94,6 +116,7 @@ model User {
   lastLoginAt   DateTime?
 
   institutions  UserInstitution[]
+  userRoles     UserRoleAssignment[]
   createdVKs    VyberoveKonanie[]  @relation("CreatedBy")
   gestorVKs     VyberoveKonanie[]  @relation("GestorVK")
   candidates    Candidate[]
@@ -101,6 +124,7 @@ model User {
   evaluations   Evaluation[]
   auditLogs     AuditLog[]
   testResults   TestResult[]
+  practiceTestResults PracticeTestResult[]
 
   @@map("users")
 }
@@ -135,6 +159,7 @@ model VyberoveKonanie {
 
   candidates        Candidate[]
   assignedTests     VKTest[]
+  attachments       CandidateAttachment[]
   commission        Commission?
   evaluationConfig  EvaluationConfig?
   documents         GeneratedDocument[]
@@ -172,6 +197,8 @@ model Test {
   approved      Boolean    @default(false)
   approvedAt    DateTime?
 
+  practiceEnabled Boolean  @default(false)
+
   authorId      String?
 
   categoryId    String?
@@ -181,7 +208,9 @@ model Test {
   updatedAt     DateTime   @updatedAt
 
   vkAssignments VKTest[]
+  testSessions  TestSession[]
   results       TestResult[]
+  practiceResults PracticeTestResult[]
 
   @@map("tests")
 }
@@ -234,17 +263,13 @@ model VKTest {
   testId        String
   test          Test     @relation(fields: [testId], references: [id])
 
-  level         Int
-
-  questionCount Int
-  durationMinutes Int
-  scorePerQuestion Float
-  minScore      Float
+  level         Int  // Sequence order (1, 2, 3, ...) not test type
 
   createdAt     DateTime @default(now())
 
-  @@unique([vkId, testId])
-  @@unique([vkId, level])
+  testSessions  TestSession[]
+
+  @@unique([vkId, level])  // Keep unique level for ordering
   @@map("vk_tests")
 }
 
@@ -271,15 +296,60 @@ model Candidate {
 
   registeredAt      DateTime @default(now())
 
+  testSessions      TestSession[]
   testResults       TestResult[]
   documents         Document[]
   evaluations       Evaluation[]
+  attachments       CandidateAttachment[]
 
   @@unique([vkId, cisIdentifier])
   @@map("candidates")
 }
 
 // ==================== VÝSLEDKY TESTOV ====================
+
+// TestSession - Aktívne testovacie sessions pre uchádzačov
+model TestSession {
+  id              String   @id @default(cuid())
+
+  candidateId     String
+  candidate       Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  vkTestId        String
+  vkTest          VKTest @relation(fields: [vkTestId], references: [id], onDelete: Cascade)
+
+  testId          String
+  test            Test @relation(fields: [testId], references: [id])
+
+  status          SessionStatus @default(NOT_STARTED)
+
+  answers         Json @default("{}")
+
+  startedAt       DateTime?
+  lastAccessedAt  DateTime?
+  completedAt     DateTime?
+
+  serverStartTime DateTime?
+  durationSeconds Int?
+
+  score           Float?
+  maxScore        Float?
+  passed          Boolean?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([candidateId, vkTestId])
+  @@map("test_sessions")
+}
+
+enum SessionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  TIME_EXPIRED
+}
 
 model TestResult {
   id            String   @id @default(cuid())
@@ -307,6 +377,31 @@ model TestResult {
 
   @@unique([candidateId, testId])
   @@map("test_results")
+}
+
+// Practice Test Results - oddelené od reálnych výsledkov kandidátov
+model PracticeTestResult {
+  id            String   @id @default(cuid())
+
+  testId        String
+  test          Test     @relation(fields: [testId], references: [id])
+
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+
+  answers       Json
+  score         Float
+  maxScore      Float
+  successRate   Float
+  passed        Boolean
+
+  startedAt     DateTime
+  completedAt   DateTime?
+  durationSeconds Int?
+
+  createdAt     DateTime @default(now())
+
+  @@map("practice_test_results")
 }
 
 // ==================== KOMISIA ====================
@@ -413,6 +508,37 @@ enum DocTyp {
   MOTIVACNY_LIST
   CERTIFIKAT
   INE
+}
+
+enum CandidateAttachmentType {
+  CV
+  MOTIVATION
+  CERTIFICATE
+  OTHER
+  UNKNOWN
+}
+
+model CandidateAttachment {
+  id               String   @id @default(cuid())
+
+  candidateId      String
+  candidate        Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  vkId             String
+  vk               VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
+
+  documentType     CandidateAttachmentType
+  originalFileName String
+  storedFileName   String
+  storagePath      String
+  mimeType         String?
+  fileSize         Int
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([candidateId, vkId], map: "idx_candidate_attachment_candidate_vk")
+  @@map("candidate_attachments")
 }
 
 model GeneratedDocument {

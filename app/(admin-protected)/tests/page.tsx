@@ -25,6 +25,12 @@ const testTypeOptions: TestTypeOption[] = [
   { value: 'SCHOPNOSTI_VLASTNOSTI', label: 'Schopnosti a vlastnosti' },
 ]
 
+function getQuestionWord(count: number) {
+  if (count === 1) return 'otázka'
+  if (count >= 2 && count <= 4) return 'otázky'
+  return 'otázok'
+}
+
 function getTestTypeBadge(type: string) {
   const colors: Record<string, string> = {
     ODBORNY: 'bg-purple-100 text-purple-800',
@@ -80,7 +86,7 @@ export default function TestsPage() {
   }, [typeFilter, categoryFilter, approvedFilter])
 
   // Use React Query hook
-  const { data, isLoading, isFetching } = useTests({
+  const { data, isLoading, isFetching, error } = useTests({
     search: debouncedSearch,
     type: typeFilter?.value,
     categoryId: categoryFilter?.value,
@@ -125,7 +131,7 @@ export default function TestsPage() {
     {
       accessorKey: 'questionCount',
       header: 'Otázky',
-      cell: ({ row }) => `${row.original.questionCount} otázok`,
+      cell: ({ row }) => `${row.original.questionCount} ${getQuestionWord(row.original.questionCount)}`,
     },
     {
       accessorKey: 'recommendedDuration',

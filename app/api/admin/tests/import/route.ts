@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
         order: q.number,
         text: q.text,
         points: 1, // Default
+        questionType: 'SINGLE_CHOICE', // Default question type
         status,
         warning,
         answers: q.answers.map((a: any, aIndex: number) => ({

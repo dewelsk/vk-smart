@@ -96,7 +96,7 @@ async function getDashboardData() {
 }
 
 export default async function AdminDashboard() {
-  const { stats, recentVKs, statusBreakdown } = await getDashboardData()
+  const { stats, recentVKs } = await getDashboardData()
 
   return (
     <div data-testid="dashboard-page">

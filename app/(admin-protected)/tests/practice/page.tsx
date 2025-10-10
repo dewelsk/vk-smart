@@ -31,6 +31,12 @@ const testTypeOptions: TestTypeOption[] = [
   { value: 'SCHOPNOSTI_VLASTNOSTI', label: 'Schopnosti a vlastnosti' },
 ]
 
+function getQuestionWord(count: number) {
+  if (count === 1) return 'otázka'
+  if (count >= 2 && count <= 4) return 'otázky'
+  return 'otázok'
+}
+
 function getTestTypeBadge(type: string) {
   const colors: Record<string, string> = {
     ODBORNY: 'bg-purple-100 text-purple-800',
@@ -230,7 +236,7 @@ export default function PracticePage() {
               <div className="space-y-2 mb-4">
                 <div className="flex items-center text-sm text-gray-600">
                   <ChartBarIcon className="h-4 w-4 mr-2" />
-                  <span>{test.questionCount} otázok</span>
+                  <span>{test.questionCount} {getQuestionWord(test.questionCount)}</span>
                 </div>
 
                 {test.recommendedDuration && (

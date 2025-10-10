@@ -82,7 +82,9 @@ export default function PracticeTestPage({ params }: Props) {
     }))
 
     setSubmitting(true)
-    toast.loading('Čas vypršal. Odosielam odpovede...')
+    toast.error('Časový limit bol prekročený. Odosielam odpovede.', {
+      duration: 4000,
+    })
 
     try {
       const res = await fetch(`/api/practice/${sessionId}/submit`, {
@@ -90,8 +92,6 @@ export default function PracticeTestPage({ params }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ answers: answersArray }),
       })
-
-      toast.dismiss()
 
       if (!res.ok) {
         const error = await res.json()
@@ -105,13 +105,10 @@ export default function PracticeTestPage({ params }: Props) {
       // Store results in sessionStorage for results page
       sessionStorage.setItem(`practice-results-${sessionId}`, JSON.stringify(data))
 
-      toast.success('Test automaticky odoslaný')
-
-      // Redirect to results page
-      router.push(`/tests/practice/${sessionId}/results`)
+      // Redirect to practice tests list
+      router.push('/tests/practice')
 
     } catch (error) {
-      toast.dismiss()
       toast.error('Chyba pri odoslaní testu')
       setSubmitting(false)
     }
@@ -225,6 +222,12 @@ export default function PracticeTestPage({ params }: Props) {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  const getQuestionWord = (count: number) => {
+    if (count === 1) return 'otázka'
+    if (count >= 2 && count <= 4) return 'otázky'
+    return 'otázok'
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -251,7 +254,7 @@ export default function PracticeTestPage({ params }: Props) {
               {testData.test.name}
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              {totalQuestions} otázok
+              {totalQuestions} {getQuestionWord(totalQuestions)}
             </p>
           </div>
 
@@ -441,9 +444,7 @@ export default function PracticeTestPage({ params }: Props) {
         message={
           allAnswered
             ? 'Chystáte sa odoslať test. Chcete pokračovať?'
-            : `Ešte ste neodpovedali na všetky otázky. Zostáva ${totalQuestions - answeredCount} ${
-                totalQuestions - answeredCount === 1 ? 'otázka' : totalQuestions - answeredCount < 5 ? 'otázky' : 'otázok'
-              }. Chcete pokračovať?`
+            : `Ešte ste neodpovedali na všetky otázky. Zostáva ${totalQuestions - answeredCount} ${getQuestionWord(totalQuestions - answeredCount)}. Chcete pokračovať?`
         }
         confirmLabel="Odoslať"
         cancelLabel="Zrušiť"

@@ -2,7 +2,169 @@
 
 Tento súbor obsahuje dôležité pravidlá a požiadavky pre prácu s Claude Code na projekte.
 
+## ⚠️ KRITICKÁ POŽIADAVKA: SSH Tunnel pre databázu
+
+**Pred spustením akejkoľvek práce s databázou musí bežať SSH tunnel!**
+
+### Kontrola či beží tunnel
+
+```bash
+lsof -i :5601
+```
+
+Ak nevidíš žiadny výstup, tunnel NEBEŽÍ.
+
+### Spustenie SSH tunnel
+
+```bash
+./scripts/db-tunnel.sh
+```
+
+Alebo manuálne:
+
+```bash
+ssh -i ~/.ssh/monitra_do -L 5601:localhost:5433 -N root@165.22.95.150
+```
+
+### Dôležité
+
+- **Port 5601** - lokálny port pre pripojenie (tento port používa .env DATABASE_URL)
+- **Port 5433** - remote port PostgreSQL Docker kontajnera
+- **Server:** 165.22.95.150
+- Tunnel musí bežať po celý čas práce s databázou
+- Ak Prisma/psql hlási "Can't reach database", najprv skontroluj či beží tunnel
+
+---
+
+## ⚠️ KRITICKÁ POŽIADAVKA: Prisma Generate po zmenách schémy
+
+**Po každej zmene Prisma schémy MUSÍŠ regenerovať Prisma client a reštartovať server!**
+
+### Kedy regenerovať Prisma client?
+
+Po akejkoľvek zmene v `prisma/schema.prisma`:
+- Pridanie/odobranie modelov
+- Pridanie/odobranie polí
+- Zmena relácií medzi modelmi
+- Zmena enum hodnôt
+- Migrácie databázy
+
+### Postup po zmene schémy
+
+```bash
+# 1. Regeneruj Prisma client
+npx prisma generate
+
+# 2. Reštartuj dev server
+# Ctrl+C alebo kill process, potom:
+npm run dev
+```
+
+### Príznaky že Prisma client nie je aktuálny
+
+- `PrismaClientValidationError: Invalid prisma.*.findFirst() invocation`
+- Chyby typu "Unknown field" alebo "Unknown relation"
+- Auth zlyháva s validation errormi
+- E2E testy zlyhávajú na login
+- Server logy obsahujú `prisma:error`
+
+### ❌ BEZ regenerácie
+
+```
+prisma:error Invalid `prisma.user.findFirst()` invocation
+Authorization error: PrismaClientValidationError
+```
+
+### ✅ PO regenerácii
+
+```
+✔ Generated Prisma Client (v5.22.0)
+Server funguje normálne, testy prechádzajú
+```
+
+**DÔLEŽITÉ:** Vždy po zmene schema.prisma spusti `npx prisma generate` pred testovaním!
+
+---
+
+## ⚠️ POVINNÉ: Testovanie po dokončení úlohy
+
+**Po dokončení každej úlohy MUSÍŠ spustiť základné testy aby si overil, že si nič nerozbit.**
+
+### Minimálne požadované testy
+
+Po každej zmene v kóde (feature, bugfix, refactoring) spusti:
+
+**Dashboard test** (zahŕňa prihlásenie + základnú funkcionalitu):
+```bash
+npm run test:e2e -- tests/e2e/admin/dashboard.spec.ts
+```
+
+Tento test overuje:
+- ✅ Prihlásenie (login)
+- ✅ Zobrazenie dashboardu
+- ✅ Navigáciu medzi stránkami
+- ✅ Základné komponenty (karty, tlačidlá)
+
+### Prečo je to dôležité?
+
+- ✅ Overíš že základná funkcionalita funguje
+- ✅ Odhalíš regression bugs pred commitom
+- ✅ Rýchla spätná väzba (testy trvajú ~30 sekúnd)
+- ❌ Bez testovania môžeš rozbiť kritickú funkcionalitu (napr. autentifikáciu)
+
+### Kedy preskočiť testy?
+
+**NIKDY.** Aj keď si zmenil len jeden riadok, spusti základné testy.
+
+Výnimka: Zmeny v dokumentácii (*.md súbory) alebo konfiguračných súboroch ktoré neovplyvňujú runtime kód.
+
+---
+
 ## E2E Testovanie
+
+### ⚠️ KRITICKÁ POŽIADAVKA: VŽDY sa najprv pozri na existujúce testy!
+
+**Pri písaní nových E2E testov NIKDY nevymýšľaj nové patterny!**
+
+**Postup:**
+1. **Najprv sa pozri** na existujúce testy v `tests/e2e/admin/`
+2. **Skopíruj pattern** pre prihlásenie, setup, cleanup
+3. **Použi rovnaké helper funkcie** ako existujúce testy
+4. **Dodržuj rovnakú štruktúru** (beforeAll, afterAll, beforeEach)
+
+**Príklady na inšpiráciu:**
+- `tests/e2e/admin/test-detail.spec.ts` - kompletný pattern s DB setup/cleanup
+- `tests/e2e/admin/tests-list.spec.ts` - pattern pre list/filter/search testy
+- `tests/helpers/auth.ts` - helper funkcie pre prihlásenie
+
+**❌ NESPRÁVNE:**
+```typescript
+// NESPRÁVNE: Vlastný login pattern
+test.beforeEach(async ({ page }) => {
+  await page.goto('http://localhost:5600/admin/login')
+  await page.getByTestId('username-input').fill('admin')
+  // ...
+})
+```
+
+**✅ SPRÁVNE:**
+```typescript
+// SPRÁVNE: Použiť existujúci helper
+import { loginAsAdmin } from '../../helpers/auth'
+
+test.beforeEach(async ({ page }) => {
+  await loginAsAdmin(page)
+})
+```
+
+**Prečo je to dôležité?**
+- ✅ Konzistentné testy naprieč celým projektom
+- ✅ Menej chýb (overené patterny)
+- ✅ Jednoduchšie maintenance
+- ✅ Rýchlejšie písanie testov (copy-paste)
+- ❌ Vlastné patterny vedú k chybám a nekonzistencii
+
+---
 
 ### ⚠️ KRITICKÁ POŽIADAVKA: Používanie data-testid namiesto textov
 
@@ -215,45 +377,14 @@ psql "postgresql://..." -c "SELECT * FROM table LIMIT 5;"
 
 ### ⚠️ KRITICKÁ POŽIADAVKA: Používanie Heroicons namiesto emoji
 
-**NIKDY nepoužívať emoji ikony (🔧, ✓, ⚠, ✕, 📄, atď.) v UI!**
+**NIKDY nepoužívať emoji ikony v UI! Vždy používaj Heroicons z `@heroicons/react`.**
 
-#### Pravidlo
+📖 **Kompletný návod:** [docs/patterns/icons.md](docs/patterns/icons.md)
 
-**Vždy používaj Heroicons** z `@heroicons/react`:
-
-```typescript
-import { IconName } from '@heroicons/react/24/outline'  // outline icons
-import { IconName } from '@heroicons/react/24/solid'    // solid icons
-```
-
-#### Bežné mapovanie emoji → Heroicons
-
-- 🔧 → `WrenchScrewdriverIcon`
-- ✓, ✅ → `CheckIcon` alebo `CheckCircleIcon`
-- ⚠️ → `ExclamationTriangleIcon`
-- ✕, ❌ → `XMarkIcon`
-- ℹ️ → `InformationCircleIcon`
-- 👤 → `UserIcon`
-- 📋 → `ClipboardDocumentListIcon`
-- ➕ → `PlusIcon`
-- 📄 → `DocumentIcon` alebo `DocumentTextIcon`
-- 📤 → `DocumentArrowUpIcon`
-- ⭐ → `StarIcon`
-- ⭕ → `QuestionMarkCircleIcon`
-
-#### Prečo?
-
-- ✅ Konzistentný dizajn
-- ✅ Lepšia prístupnosť (accessibility)
-- ✅ Profesionálny vzhľad
-- ✅ Prispôsobiteľné (veľkosť, farba)
-- ❌ Emoji sa renderujú rôzne na rôznych platformách
-- ❌ Emoji komplikujú testovanie
-- ❌ Emoji vyzerajú neprofesionálne
-
-#### Dokumentácia
-
-https://heroicons.com/
+**Základné pravidlá:**
+- Emoji v návrhoch (`obrazovky/*.md`) sú LEN ilustračné
+- V kóde VŽDY použiť Heroicons: `import { IconName } from '@heroicons/react/24/outline'`
+- Dokumentácia: https://heroicons.com/
 
 ---
 
@@ -290,43 +421,25 @@ if (window.confirm('Naozaj chcete pokračovať?')) {
 ```typescript
 import { ConfirmModal } from '@/components/ConfirmModal'
 
-function MyComponent() {
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [itemToDelete, setItemToDelete] = useState<Item | null>(null)
+const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  const handleDeleteClick = (item: Item) => {
-    setItemToDelete(item)
-    setShowDeleteConfirm(true)
-  }
+// Pri kliknutí na delete button
+const handleDeleteClick = () => setShowDeleteConfirm(true)
 
-  const handleConfirmDelete = async () => {
-    if (itemToDelete) {
-      await deleteItem(itemToDelete.id)
-      setShowDeleteConfirm(false)
-      setItemToDelete(null)
-    }
-  }
-
-  return (
-    <>
-      <button onClick={() => handleDeleteClick(item)}>
-        Vymazať
-      </button>
-
-      <ConfirmModal
-        isOpen={showDeleteConfirm}
-        title="Vymazať položku"
-        message={`Naozaj chcete vymazať položku "${itemToDelete?.name}"?`}
-        confirmLabel="Vymazať"
-        cancelLabel="Zrušiť"
-        variant="danger"
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
-    </>
-  )
-}
+// JSX
+<ConfirmModal
+  isOpen={showDeleteConfirm}
+  title="Vymazať položku"
+  message="Naozaj chcete vymazať?"
+  variant="danger"
+  onConfirm={handleConfirmDelete}
+  onCancel={() => setShowDeleteConfirm(false)}
+/>
 ```
+
+📖 **Plná implementácia:**
+- Komponent: [components/ConfirmModal.tsx](../components/ConfirmModal.tsx)
+- Príklad použitia: [app/(admin-protected)/tests/[id]/page.tsx:222-239](../app/(admin-protected)/tests/[id]/page.tsx) (delete handler s ConfirmModal)
 
 #### Prečo?
 
@@ -379,74 +492,29 @@ const handleSubmit = () => {
 #### ✅ SPRÁVNE - S inline validáciou a error stavom
 
 ```typescript
-import { useRef } from 'react'
+const [name, setName] = useState('')
+const [errors, setErrors] = useState<{ name?: string }>({})
+const nameInputRef = useRef<HTMLInputElement>(null)
 
-function MyForm() {
-  const [name, setName] = useState('')
-  const [errors, setErrors] = useState<{ name?: string }>({})
-  const nameInputRef = useRef<HTMLInputElement>(null)
-
-  const handleSubmit = () => {
-    const newErrors: { name?: string } = {}
-
-    // Validácia
-    if (!name.trim()) {
-      newErrors.name = 'Názov je povinný'
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
-
-      // Auto-scroll na prvý chybný input
-      if (newErrors.name) {
-        nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        nameInputRef.current?.focus()
-      }
-
-      return
-    }
-
-    // Clear errors
-    setErrors({})
-
-    // Submit logic...
-  }
-
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        Názov *
-      </label>
-      <input
-        ref={nameInputRef}
-        data-testid="name-input"
-        type="text"
-        value={name}
-        onChange={(e) => {
-          setName(e.target.value)
-          // Clear error on change
-          if (errors.name) {
-            setErrors({ ...errors, name: undefined })
-          }
-        }}
-        className={`
-          w-full px-3 py-2 border rounded-md
-          focus:outline-none focus:ring-1
-          ${errors.name
-            ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
-            : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
-          }
-        `}
-      />
-      {errors.name && (
-        <p className="mt-2 text-sm text-red-600">
-          {errors.name}
-        </p>
-      )}
-    </div>
-  )
-}
+// V JSX
+<input
+  ref={nameInputRef}
+  data-testid="name-input"
+  value={name}
+  onChange={(e) => {
+    setName(e.target.value)
+    if (errors.name) setErrors({ ...errors, name: undefined })
+  }}
+  className={errors.name ? 'border-red-500' : 'border-gray-300'}
+/>
+{errors.name && (
+  <p className="mt-2 text-sm text-red-600" data-testid="name-error">
+    {errors.name}
+  </p>
+)}
 ```
+
+📖 **Plné príklady:** [docs/patterns/form-validation.md](../docs/patterns/form-validation.md)
 
 #### Toast notifikácie - Konzistentné používanie
 
@@ -477,128 +545,12 @@ toast.warning('Niektoré polia neboli vyplnené')
 
 #### Pattern pre komplexné formuláre
 
-```typescript
-function ComplexForm() {
-  // State
-  const [formData, setFormData] = useState({ name: '', email: '', category: '' })
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
-
-  // Refs pre auto-scroll
-  const nameRef = useRef<HTMLInputElement>(null)
-  const emailRef = useRef<HTMLInputElement>(null)
-  const categoryRef = useRef<HTMLSelectElement>(null)
-
-  const refs = {
-    name: nameRef,
-    email: emailRef,
-    category: categoryRef,
-  }
-
-  const validate = () => {
-    const newErrors: Record<string, string> = {}
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Názov je povinný'
-    }
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email je povinný'
-    }
-    if (!formData.category) {
-      newErrors.category = 'Kategória je povinná'
-    }
-
-    setErrors(newErrors)
-
-    // Scroll na prvý error
-    if (Object.keys(newErrors).length > 0) {
-      const firstErrorField = Object.keys(newErrors)[0]
-      refs[firstErrorField as keyof typeof refs]?.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
-      })
-      refs[firstErrorField as keyof typeof refs]?.current?.focus()
-    }
-
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = async () => {
-    if (!validate()) {
-      return
-    }
-
-    setSaving(true)
-    toast.loading('Ukladám...')
-
-    try {
-      const res = await fetch('/api/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
-
-      const data = await res.json()
-      toast.dismiss()
-
-      if (!res.ok) {
-        toast.error(data.error || 'Chyba pri ukladaní')
-        return
-      }
-
-      toast.success('Úspešne uložené')
-      router.push('/success-page')
-    } catch (error) {
-      toast.dismiss()
-      toast.error('Chyba pri ukladaní')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); handleSubmit() }}>
-      {/* Input fields with errors */}
-      <FormField
-        label="Názov"
-        required
-        error={errors.name}
-        ref={nameRef}
-      >
-        <input
-          data-testid="name-input"
-          type="text"
-          value={formData.name}
-          onChange={(e) => {
-            setFormData({ ...formData, name: e.target.value })
-            if (errors.name) setErrors({ ...errors, name: undefined })
-          }}
-          className={inputClassName(errors.name)}
-        />
-      </FormField>
-
-      <button
-        type="submit"
-        disabled={saving}
-        data-testid="submit-button"
-        className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-      >
-        {saving ? 'Ukladám...' : 'Uložiť'}
-      </button>
-    </form>
-  )
-}
-
-// Helper pre className
-const inputClassName = (error?: string) => `
-  w-full px-3 py-2 border rounded-md
-  focus:outline-none focus:ring-1
-  ${error
-    ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
-    : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
-  }
-`
-```
+Pozri [docs/patterns/form-validation.md](../docs/patterns/form-validation.md) pre kompletný príklad s:
+- Validáciou viacerých polí
+- Auto-scroll na prvý error
+- Toast notifikáciami
+- Submit handling
+- React-select integráciou
 
 #### Kontrolný zoznam pre formuláre
 
@@ -637,193 +589,19 @@ Pri vytváraní nového formulára:
 
 **Po vytvorení každého formulára MUSÍŠ vytvoriť E2E testy.**
 
-#### Minimálne požadované testy
+📖 **Kompletný návod:** [docs/patterns/e2e-form-tests.md](docs/patterns/e2e-form-tests.md)
 
-Pre každý formulár vytvor nasledujúce testy:
+**Minimálne požadované testy:**
+1. Otvorenie modalu/formulára
+2. Validácia každého povinného poľa
+3. **Úspešné vytvorenie LEN s povinnými poľami** (nepovinné prázdne!)
+4. **Úspešné vytvorenie so VŠETKÝMI poľami**
+5. Zatvorenie modalu (cancel)
+6. Duplikát (ak relevantné)
 
-1. **Otvorenie modalu/formulára**
-2. **Validácia povinných polí** - samostatný test pre každé povinné pole
-3. **⚠️ Úspešné vytvorenie len s povinnými poľami** - vyplniť IBA povinné polia, nepovinné ostanú prázdne
-4. **⚠️ Úspešné vytvorenie so všetkými poľami** - vyplniť všetky polia (povinné aj nepovinné)
-5. **Zatvorenie modalu/formulára** (cancel)
-6. **Duplikát** (ak relevantné) - pokus o vytvorenie záznamu s už existujúcim unique poľom
+**React-select:** Vždy používaj `inputId` prop pre stabilné ID v testoch.
 
-**Prečo sú testy 3 a 4 dôležité?**
-
-Formuláre často zlyhajú keď nepovinné polia ostanú prázdne, pretože:
-- Frontend môže posielať `null` namiesto `undefined`
-- Backend validácia očakáva `optional()` ale dostane `null`
-- Rôzne typy chýb medzi prázdnym stringom `""`, `null`, a `undefined`
-
-**Príklad:**
-- **Povinné polia:** name, typeId
-- **Nepovinné polia:** description
-
-**Test 3** - Len povinné:
-```typescript
-// Vyplní len name a typeId
-// description OSTANE PRÁZDNE (nie je vyplnené)
-```
-
-**Test 4** - Všetky polia:
-```typescript
-// Vyplní name, typeId, aj description
-```
-
-#### Príklad E2E testov pre formulár
-
-**Formulár s poľami:**
-- **Povinné:** name, typeId
-- **Nepovinné:** description
-
-```typescript
-test.describe('Create Category', () => {
-  // Test 1: Validácia povinného poľa
-  test('should validate required name field', async ({ page }) => {
-    await page.click('button:has-text("Pridať kategóriu")')
-
-    // Try to submit without name
-    await page.click('button:has-text("Uložiť kategóriu")')
-
-    // Should show inline error message
-    await expect(page.getByTestId('category-name-error')).toBeVisible()
-    await expect(page.getByTestId('category-name-error')).toHaveText('Názov kategórie je povinný')
-  })
-
-  // Test 2: Validácia ďalšieho povinného poľa
-  test('should validate required type field', async ({ page }) => {
-    await page.click('button:has-text("Pridať kategóriu")')
-
-    // Fill name but not type
-    await page.getByTestId('category-name-input').fill('Test Category')
-
-    await page.click('button:has-text("Uložiť kategóriu")')
-
-    // Should show inline error for type
-    await expect(page.getByTestId('category-type-error')).toBeVisible()
-    await expect(page.getByTestId('category-type-error')).toHaveText('Typ testu je povinný')
-  })
-
-  // ⚠️ Test 3: Len POVINNÉ polia (description OSTANE PRÁZDNE)
-  test('should create category with required fields only', async ({ page }) => {
-    const categoryName = `E2E Required Only ${Date.now()}`
-
-    await page.click('button:has-text("Pridať kategóriu")')
-
-    // Fill ONLY required fields
-    await page.getByTestId('category-name-input').fill(categoryName)
-
-    const selectInput = page.locator('#category-type-select-input')
-    await selectInput.click({ force: true })
-    await page.waitForTimeout(500)
-    const firstOption = page.locator('[id^="react-select"][id$="-option-0"]').first()
-    await firstOption.click({ force: true })
-
-    // DO NOT fill description - leave it empty!
-
-    // Submit
-    await page.click('button:has-text("Uložiť kategóriu")')
-
-    // Verify success
-    await expect(page.locator('h3:has-text("Pridať kategóriu")')).not.toBeVisible()
-    await expect(page.locator(`tr:has-text("${categoryName}")`)).toBeVisible()
-  })
-
-  // ⚠️ Test 4: VŠETKY polia (povinné aj nepovinné)
-  test('should create category with all fields', async ({ page }) => {
-    const categoryName = `E2E All Fields ${Date.now()}`
-    const description = 'This is a test category description'
-
-    await page.click('button:has-text("Pridať kategóriu")')
-
-    // Fill ALL fields (required + optional)
-    await page.getByTestId('category-name-input').fill(categoryName)
-
-    const selectInput = page.locator('#category-type-select-input')
-    await selectInput.click({ force: true })
-    await page.waitForTimeout(500)
-    const firstOption = page.locator('[id^="react-select"][id$="-option-0"]').first()
-    await firstOption.click({ force: true })
-
-    // Fill optional field
-    await page.getByTestId('category-description-input').fill(description)
-
-    // Submit
-    await page.click('button:has-text("Uložiť kategóriu")')
-
-    // Verify success
-    await expect(page.locator('h3:has-text("Pridať kategóriu")')).not.toBeVisible()
-    await expect(page.locator(`tr:has-text("${categoryName}")`)).toBeVisible()
-  })
-
-  // Test 5: Cancel
-  test('should close modal when clicking cancel', async ({ page }) => {
-    await page.click('button:has-text("Pridať kategóriu")')
-    await expect(page.locator('h3:has-text("Pridať kategóriu")')).toBeVisible()
-
-    await page.click('button:has-text("Zrušiť")')
-    await expect(page.locator('h3:has-text("Pridať kategóriu")')).not.toBeVisible()
-  })
-})
-```
-
-#### React-select v testoch
-
-Pre `react-select` komponenty **MUSÍŠ** použiť `inputId` prop:
-
-```tsx
-// V komponente
-<Select
-  inputId="category-type-select-input"  // Stabilné ID!
-  value={type}
-  onChange={setType}
-  options={options}
-  menuPortalTarget={document.body}
-  styles={{
-    menuPortal: (base) => ({ ...base, zIndex: 9999 })
-  }}
-/>
-
-// V teste
-const selectInput = page.locator('#category-type-select-input')
-await selectInput.click({ force: true })
-await page.waitForTimeout(500)
-const firstOption = page.locator('[id^="react-select"][id$="-option-0"]').first()
-await firstOption.click({ force: true })
-```
-
-**Prečo `inputId`?**
-- React-select generuje náhodné ID (`react-select-3-input`, `react-select-4-input`...)
-- `inputId` prop vytvorí stabilné ID pre testovanie
-
-#### Kedy použiť `{ force: true }`
-
-Použij `{ force: true }` pri kliknutí keď:
-- Element je zakrytý overlay-om (napr. modal backdrop)
-- React-select menu sa renderuje cez portal
-
-```typescript
-// Modal overlay zakrýva element
-await selectInput.click({ force: true })
-
-// Normálne tlačidlo - BEZ force
-await page.getByTestId('submit-button').click()
-```
-
-#### Kontrolný zoznam pre E2E testy formulára
-
-Po vytvorení formulára:
-
-- [ ] Test na otvorenie modalu/formulára
-- [ ] Test pre každé povinné pole (validácia s `data-testid` error)
-- [ ] **Test na vytvorenie LEN s povinnými poľami** (nepovinné ostanú prázdne)
-- [ ] **Test na vytvorenie so VŠETKÝMI poľami** (povinné aj nepovinné)
-- [ ] Test na zrušenie (cancel button)
-- [ ] Test na duplikát (ak relevantné)
-- [ ] Všetky testy používajú `getByTestId()` namiesto text selectors
-- [ ] React-select má `inputId` prop
-- [ ] Error messages majú `data-testid="[názov]-error"`
-- [ ] Backend API schema akceptuje `null` pre nepovinné polia (`.nullish()` alebo `.nullable().optional()`)
+**Príklady:** [tests/e2e/admin/test-categories.spec.ts](tests/e2e/admin/test-categories.spec.ts), [test-import.spec.ts](tests/e2e/admin/test-import.spec.ts)
 
 ---
 
@@ -833,613 +611,159 @@ Po vytvorení formulára:
 
 **Po vytvorení každého API route MUSÍŠ vytvoriť backend testy.**
 
-Backend testy sa nachádzajú v `tests/backend/` a testujú Prisma operácie a business logiku.
+📖 **Kompletný návod:** [docs/patterns/backend-testing.md](docs/patterns/backend-testing.md)
 
-#### Minimálne požadované testy pre CRUD API
+**Minimálne požadované testy pre CRUD API:**
+1. **GET (list)** - search, filter, sort, pagination, count, relations
+2. **POST (create)** - all fields, without optional, duplicate error, invalid FK
+3. **PATCH (update)** - each field, set null, duplicate error, updatedAt
+4. **DELETE** - success, related records behavior
+5. **GET (single)** - by ID, non-existent ID, relations
+6. **Relationships** - link, query by relation
 
-Pre každý API endpoint vytvor testy pre:
+**Dôležité pravidlá:**
+- Používaj `Date.now()` pre unikátne názvy
+- Vždy cleanup v `afterEach`/`afterAll`
+- Test aj success aj failure cases
 
-1. **GET (list)** - načítanie zoznamu
-   - Základné načítanie dát
-   - Search (vyhľadávanie)
-   - Filter (filtrovanie)
-   - Sort (triedenie)
-   - Pagination (stránkovanie)
-   - Count (počet záznamov)
-   - Include relations (vzťahy medzi modelmi)
+**Spustenie:** `npm run test:backend`
 
-2. **POST (create)** - vytvorenie záznamu
-   - Úspešné vytvorenie so všetkými poľami
-   - Vytvorenie bez optional polí
-   - Chyba pri duplicate name/unique constraint
-   - Chyba pri neexistujúcom foreign key
+**Príklady:** [tests/backend/test-categories-api.test.ts](tests/backend/test-categories-api.test.ts), [tests-api.test.ts](tests/backend/tests-api.test.ts)
 
-3. **PATCH (update)** - úprava záznamu
-   - Úprava každého poľa samostatne
-   - Nastavenie optional polí na null
-   - Chyba pri duplicate name
-   - Automatické updatedAt timestamp
+---
 
-4. **DELETE** - vymazanie záznamu
-   - Úspešné vymazanie záznamu bez referencií
-   - Správne správanie pri vymazaní so vzťahmi (ON DELETE CASCADE/SET NULL)
-   - Count súvisiacich záznamov
+## Dizajn a UI komponenty
 
-5. **GET (single)** - načítanie jedného záznamu
-   - Úspešné načítanie podľa ID
-   - Null pre neexistujúci ID
-   - Include relations
+### ⚠️ KRITICKÁ POŽIADAVKA: Konzistentný dizajn tlačidiel
 
-6. **Relationships** - vzťahy medzi modelmi
-   - Prepojenie cez foreign key
-   - Query podľa vzťahu
-   - Aktualizácia vzťahu
+**Všetky tlačidlá v aplikácii musia mať jednotný vizuálny štýl.**
 
-#### Štruktúra backend testu
+📖 **Kompletný návod:** [docs/patterns/ui-components.md](docs/patterns/ui-components.md)
+
+**Základné pravidlá:**
+- Vždy `text-sm font-medium px-4 py-2 rounded-md`
+- **Primary:** `bg-blue-600 text-white hover:bg-blue-700`
+- **Secondary:** `border border-gray-300 text-gray-700 bg-white hover:bg-gray-50`
+- **Destructive:** `bg-red-600 text-white hover:bg-red-700`
+- Ikony (voliteľné): `h-4 w-4` s `inline-flex items-center gap-2`
+
+**Príklady:** Pozri existujúce komponenty v `components/PageHeader.tsx`, `components/ConfirmModal.tsx`
+
+---
+
+## Slovenské skloňovanie
+
+### ⚠️ KRITICKÁ POŽIADAVKA: Správne skloňovanie slovenských slov
+
+**Slovenské slová sa skloňujú podľa počtu. NIKDY nepoužívaj fixný text pre všetky čísla!**
+
+#### Pravidlá skloňovania pre "otázka"
+
+V slovenčine máme tri formy:
+- **1 = otázka** (jednotné číslo - singulár)
+- **2-4 = otázky** (nižší plurál - paukál)
+- **5+ = otázok** (genitív plurálu)
+
+**Príklady:**
+- 1 otázka
+- 2 otázky
+- 3 otázky
+- 4 otázky
+- 5 otázok
+- 10 otázok
+- 100 otázok
+
+#### Implementácia v kóde
+
+**Helper funkcia:**
 
 ```typescript
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
-import { prisma } from '@/lib/prisma'
-
-describe('Test Categories API', () => {
-  let testTypeId: string
-
-  // Setup - vykonáva sa raz pred všetkými testmi
-  beforeAll(async () => {
-    await prisma.$connect()
-
-    // Vytvor testovacie dáta pre foreign keys
-    const testType = await prisma.testType.create({
-      data: {
-        name: 'Test Type ' + Date.now(),
-        description: 'Test type for category tests'
-      }
-    })
-    testTypeId = testType.id
-  })
-
-  // Cleanup - vykonáva sa raz po všetkých testoch
-  afterAll(async () => {
-    if (testTypeId) {
-      await prisma.testType.delete({
-        where: { id: testTypeId }
-      }).catch(() => {})
-    }
-    await prisma.$disconnect()
-  })
-
-  describe('GET /api/admin/test-categories - List', () => {
-    it('should fetch all test categories', async () => {
-      const categories = await prisma.testCategory.findMany()
-
-      expect(categories).toBeDefined()
-      expect(Array.isArray(categories)).toBe(true)
-    })
-
-    it('should search by name', async () => {
-      const categories = await prisma.testCategory.findMany({
-        where: {
-          name: {
-            contains: 'jazyk',
-            mode: 'insensitive'
-          }
-        }
-      })
-
-      expect(categories).toBeDefined()
-      categories.forEach(category => {
-        expect(category.name.toLowerCase()).toContain('jazyk')
-      })
-    })
-
-    it('should filter by test type', async () => {
-      const categories = await prisma.testCategory.findMany({
-        where: { typeId: testTypeId }
-      })
-
-      categories.forEach(category => {
-        expect(category.typeId).toBe(testTypeId)
-      })
-    })
-
-    it('should sort by name ascending', async () => {
-      const categories = await prisma.testCategory.findMany({
-        orderBy: { name: 'asc' }
-      })
-
-      for (let i = 0; i < categories.length - 1; i++) {
-        expect(categories[i].name <= categories[i + 1].name).toBe(true)
-      }
-    })
-
-    it('should paginate correctly', async () => {
-      const limit = 2
-      const page1 = await prisma.testCategory.findMany({
-        take: limit,
-        skip: 0,
-        orderBy: { name: 'asc' }
-      })
-
-      const page2 = await prisma.testCategory.findMany({
-        take: limit,
-        skip: limit,
-        orderBy: { name: 'asc' }
-      })
-
-      expect(page1.length).toBeLessThanOrEqual(limit)
-      expect(page2.length).toBeLessThanOrEqual(limit)
-      if (page1.length > 0 && page2.length > 0) {
-        expect(page1[0].id).not.toBe(page2[0].id)
-      }
-    })
-
-    it('should count total correctly', async () => {
-      const total = await prisma.testCategory.count()
-
-      expect(total).toBeGreaterThanOrEqual(0)
-      expect(typeof total).toBe('number')
-    })
-
-    it('should include relations', async () => {
-      const categories = await prisma.testCategory.findMany({
-        include: {
-          type: {
-            select: { id: true, name: true }
-          },
-          _count: {
-            select: { tests: true }
-          }
-        }
-      })
-
-      categories.forEach(category => {
-        if (category.typeId) {
-          expect(category.type).toBeDefined()
-          expect(category.type?.id).toBeDefined()
-        }
-        expect(category._count).toBeDefined()
-        expect(typeof category._count.tests).toBe('number')
-      })
-    })
-  })
-
-  describe('POST /api/admin/test-categories - Create', () => {
-    let createdCategoryId: string | null = null
-
-    // Cleanup po každom teste
-    afterEach(async () => {
-      if (createdCategoryId) {
-        await prisma.testCategory.delete({
-          where: { id: createdCategoryId }
-        })
-        createdCategoryId = null
-      }
-    })
-
-    it('should create with all fields', async () => {
-      const data = {
-        name: 'Test Category ' + Date.now(),
-        description: 'Test description',
-        typeId: testTypeId
-      }
-
-      const category = await prisma.testCategory.create({
-        data,
-        include: {
-          type: {
-            select: { id: true, name: true }
-          }
-        }
-      })
-
-      createdCategoryId = category.id
-
-      expect(category).toBeDefined()
-      expect(category.name).toBe(data.name)
-      expect(category.description).toBe(data.description)
-      expect(category.typeId).toBe(data.typeId)
-      expect(category.type).toBeDefined()
-      expect(category.id).toBeDefined()
-      expect(category.createdAt).toBeDefined()
-      expect(category.updatedAt).toBeDefined()
-    })
-
-    it('should create without optional fields', async () => {
-      const category = await prisma.testCategory.create({
-        data: {
-          name: 'Test Category No Desc ' + Date.now(),
-          typeId: testTypeId
-        }
-      })
-
-      createdCategoryId = category.id
-
-      expect(category.description).toBeNull()
-    })
-
-    it('should fail with duplicate name', async () => {
-      const category1 = await prisma.testCategory.create({
-        data: { name: 'Duplicate ' + Date.now() }
-      })
-      createdCategoryId = category1.id
-
-      await expect(
-        prisma.testCategory.create({
-          data: { name: category1.name }
-        })
-      ).rejects.toThrow()
-    })
-
-    it('should fail with non-existent foreign key', async () => {
-      await expect(
-        prisma.testCategory.create({
-          data: {
-            name: 'Invalid FK ' + Date.now(),
-            typeId: 'non-existent-id'
-          }
-        })
-      ).rejects.toThrow()
-    })
-  })
-
-  describe('PATCH /api/admin/test-categories/[id] - Update', () => {
-    let categoryId: string
-
-    beforeEach(async () => {
-      const category = await prisma.testCategory.create({
-        data: {
-          name: 'Update Test ' + Date.now(),
-          description: 'Original description',
-          typeId: testTypeId
-        }
-      })
-      categoryId = category.id
-    })
-
-    afterEach(async () => {
-      if (categoryId) {
-        await prisma.testCategory.delete({
-          where: { id: categoryId }
-        }).catch(() => {})
-      }
-    })
-
-    it('should update name', async () => {
-      const newName = 'Updated Name ' + Date.now()
-
-      const updated = await prisma.testCategory.update({
-        where: { id: categoryId },
-        data: { name: newName }
-      })
-
-      expect(updated.name).toBe(newName)
-      expect(updated.description).toBe('Original description')
-    })
-
-    it('should clear optional field with null', async () => {
-      const updated = await prisma.testCategory.update({
-        where: { id: categoryId },
-        data: { description: null }
-      })
-
-      expect(updated.description).toBeNull()
-    })
-
-    it('should fail with duplicate name', async () => {
-      const duplicateName = 'Duplicate ' + Date.now()
-
-      const category2 = await prisma.testCategory.create({
-        data: { name: duplicateName }
-      })
-
-      await expect(
-        prisma.testCategory.update({
-          where: { id: categoryId },
-          data: { name: duplicateName }
-        })
-      ).rejects.toThrow()
-
-      await prisma.testCategory.delete({ where: { id: category2.id } })
-    })
-
-    it('should update updatedAt timestamp', async () => {
-      const before = await prisma.testCategory.findUnique({
-        where: { id: categoryId }
-      })
-
-      await new Promise(resolve => setTimeout(resolve, 10))
-
-      const updated = await prisma.testCategory.update({
-        where: { id: categoryId },
-        data: { description: 'New description' }
-      })
-
-      expect(updated.updatedAt > before!.updatedAt).toBe(true)
-    })
-  })
-
-  describe('DELETE /api/admin/test-categories/[id]', () => {
-    let categoryId: string
-
-    beforeEach(async () => {
-      const category = await prisma.testCategory.create({
-        data: { name: 'Delete Test ' + Date.now() }
-      })
-      categoryId = category.id
-    })
-
-    afterEach(async () => {
-      if (categoryId) {
-        await prisma.testCategory.delete({
-          where: { id: categoryId }
-        }).catch(() => {})
-      }
-    })
-
-    it('should delete successfully', async () => {
-      await prisma.testCategory.delete({
-        where: { id: categoryId }
-      })
-
-      const deleted = await prisma.testCategory.findUnique({
-        where: { id: categoryId }
-      })
-
-      expect(deleted).toBeNull()
-      categoryId = null as any
-    })
-
-    it('should return count of related records', async () => {
-      const categoryWithCount = await prisma.testCategory.findUnique({
-        where: { id: categoryId },
-        include: {
-          _count: {
-            select: { tests: true }
-          }
-        }
-      })
-
-      expect(categoryWithCount?._count).toBeDefined()
-      expect(typeof categoryWithCount?._count.tests).toBe('number')
-    })
-  })
-
-  describe('GET /api/admin/test-categories/[id] - Single', () => {
-    let categoryId: string
-
-    beforeAll(async () => {
-      const category = await prisma.testCategory.create({
-        data: {
-          name: 'Single Test ' + Date.now(),
-          description: 'Description',
-          typeId: testTypeId
-        }
-      })
-      categoryId = category.id
-    })
-
-    afterAll(async () => {
-      await prisma.testCategory.delete({
-        where: { id: categoryId }
-      }).catch(() => {})
-    })
-
-    it('should fetch by id', async () => {
-      const category = await prisma.testCategory.findUnique({
-        where: { id: categoryId }
-      })
-
-      expect(category).toBeDefined()
-      expect(category?.id).toBe(categoryId)
-      expect(category?.name).toContain('Single Test')
-    })
-
-    it('should return null for non-existent id', async () => {
-      const category = await prisma.testCategory.findUnique({
-        where: { id: 'non-existent-id' }
-      })
-
-      expect(category).toBeNull()
-    })
-
-    it('should include relations', async () => {
-      const category = await prisma.testCategory.findUnique({
-        where: { id: categoryId },
-        include: {
-          type: {
-            select: { id: true, name: true }
-          },
-          _count: {
-            select: { tests: true }
-          }
-        }
-      })
-
-      expect(category?.type).toBeDefined()
-      expect(category?.type?.id).toBe(testTypeId)
-      expect(category?._count).toBeDefined()
-    })
-  })
-
-  describe('Relationships', () => {
-    it('should link to related model', async () => {
-      const category = await prisma.testCategory.create({
-        data: {
-          name: 'Relationship Test ' + Date.now(),
-          typeId: testTypeId
-        }
-      })
-
-      const categoryWithType = await prisma.testCategory.findUnique({
-        where: { id: category.id },
-        include: { type: true }
-      })
-
-      expect(categoryWithType?.type).toBeDefined()
-      expect(categoryWithType?.type?.id).toBe(testTypeId)
-
-      await prisma.testCategory.delete({ where: { id: category.id } })
-    })
-
-    it('should query by related model', async () => {
-      const category1 = await prisma.testCategory.create({
-        data: {
-          name: 'Query Test 1 ' + Date.now(),
-          typeId: testTypeId
-        }
-      })
-
-      const category2 = await prisma.testCategory.create({
-        data: {
-          name: 'Query Test 2 ' + Date.now(),
-          typeId: testTypeId
-        }
-      })
-
-      const categories = await prisma.testCategory.findMany({
-        where: {
-          typeId: testTypeId,
-          name: { contains: 'Query Test' }
-        }
-      })
-
-      expect(categories.length).toBeGreaterThanOrEqual(2)
-      categories.forEach(cat => {
-        expect(cat.typeId).toBe(testTypeId)
-      })
-
-      await prisma.testCategory.delete({ where: { id: category1.id } })
-      await prisma.testCategory.delete({ where: { id: category2.id } })
-    })
-  })
-})
+function getQuestionWord(count: number) {
+  if (count === 1) return 'otázka'
+  if (count >= 2 && count <= 4) return 'otázky'
+  return 'otázok'
+}
 ```
 
-#### Dôležité pravidlá pre backend testy
+#### ❌ ZLE - Fixný text
 
-**1. Používaj Date.now() pre unikátne názvy:**
+```tsx
+// ZLE: Vždy "otázok" bez ohľadu na počet
+<p>{questionCount} otázok</p>
 
-```typescript
-// ✅ SPRÁVNE: Unikátny názov pre každý test run
-name: 'Test Category ' + Date.now()
-
-// ❌ ZLE: Hardcoded názov zlyhá pri druhom spustení (duplicate)
-name: 'Test Category'
+// ZLE: Zobrazí "2 otázok" namiesto "2 otázky"
+toast.success(`Rozpoznaných ${count} otázok`)
 ```
 
-**2. Vždy cleanup v afterEach/afterAll:**
+#### ✅ SPRÁVNE - Dynamické skloňovanie
 
-```typescript
-afterEach(async () => {
-  if (createdId) {
-    await prisma.model.delete({
-      where: { id: createdId }
-    }).catch(() => {})  // catch() aby nezlyhalo ak už vymazané
-    createdId = null
-  }
-})
+```tsx
+// SPRÁVNE: Správna forma podľa počtu
+<p>{questionCount} {getQuestionWord(questionCount)}</p>
+
+// SPRÁVNE: "1 otázka", "2 otázky", "5 otázok"
+toast.success(`Rozpoznaných ${count} ${getQuestionWord(count)}`)
 ```
 
-**3. Test aj success aj failure cases:**
+#### Kde aplikovať
 
-```typescript
-// Success case
-it('should create successfully', async () => {
-  const item = await prisma.model.create({ data: { name: 'Test' } })
-  expect(item).toBeDefined()
-})
+Toto pravidlo platí **všade kde zobrazuješ počet otázok**:
+- ✅ Tabuľky a zoznamy
+- ✅ Toast notifikácie
+- ✅ Modálne okná
+- ✅ Karty a dashboardy
+- ✅ Formuláre a inputy
 
-// Failure case
-it('should fail with duplicate name', async () => {
-  await expect(
-    prisma.model.create({ data: { name: existingName } })
-  ).rejects.toThrow()
-})
-```
+#### Príklady súborov kde je to implementované
 
-**4. Test relations a counts:**
-
-```typescript
-it('should include related data', async () => {
-  const item = await prisma.model.findUnique({
-    where: { id },
-    include: {
-      relatedModel: true,
-      _count: {
-        select: { children: true }
-      }
-    }
-  })
-
-  expect(item?.relatedModel).toBeDefined()
-  expect(typeof item?._count.children).toBe('number')
-})
-```
-
-**5. Test pagination správne:**
-
-```typescript
-it('should paginate correctly', async () => {
-  const limit = 2
-  const page1 = await prisma.model.findMany({
-    take: limit,
-    skip: 0,
-    orderBy: { name: 'asc' }
-  })
-
-  const page2 = await prisma.model.findMany({
-    take: limit,
-    skip: limit,
-    orderBy: { name: 'asc' }
-  })
-
-  expect(page1.length).toBeLessThanOrEqual(limit)
-  expect(page2.length).toBeLessThanOrEqual(limit)
-
-  // Verify different records
-  if (page1.length > 0 && page2.length > 0) {
-    expect(page1[0].id).not.toBe(page2[0].id)
-  }
-})
-```
-
-#### Kontrolný zoznam pre backend testy
-
-Po vytvorení API route:
-
-- [ ] Vytvorený test súbor v `tests/backend/[názov]-api.test.ts`
-- [ ] `beforeAll` - pripojenie k DB a vytvorenie test fixtures
-- [ ] `afterAll` - vyčistenie fixtures a odpojenie od DB
-- [ ] `afterEach` - cleanup vytvorených dát v každom teste
-- [ ] **GET (list)** - fetch all, search, filter, sort, pagination, count, relations
-- [ ] **POST (create)** - success, without optional, duplicate error, invalid FK
-- [ ] **PATCH (update)** - update každého poľa, set null, duplicate error, updatedAt
-- [ ] **DELETE** - success, related records behavior
-- [ ] **GET (single)** - by ID, non-existent ID, relations
-- [ ] **Relationships** - link, query by relation
-- [ ] Všetky názvy používajú `Date.now()` pre unikátnosť
-- [ ] Všetky testy robia cleanup po sebe
-
-#### Spustenie backend testov
-
-```bash
-npm run test:backend
-```
-
-Pre watch mode:
-
-```bash
-npm run test:backend:watch
-```
+- `/app/(admin-protected)/tests/page.tsx` - DataTable cell s počtom otázok
+- `/app/(admin-protected)/tests/practice/page.tsx` - Zobrazenie počtu otázok v karte testu
+- `/app/(admin-protected)/tests/practice/[sessionId]/page.tsx` - Hlavička testu + modál
+- `/app/(admin-protected)/tests/import/page.tsx` - Toast správy + zobrazenie počtu
 
 #### Prečo je to dôležité?
 
-- ✅ Overenie že Prisma schéma a queries fungujú správne
-- ✅ Catch database constraint violations
-- ✅ Validácia business logiky pred E2E testami
-- ✅ Rýchlejšie ako E2E testy (žiadny browser overhead)
-- ✅ Overenie ON DELETE CASCADE/SET NULL správania
-- ✅ Testovanie edge cases (null values, duplicates, missing relations)
+- ✅ **Profesionálny dojem** - aplikácia v správnej slovenčine
+- ✅ **Používateľská skúsenosť** - prirodzený jazyk
+- ✅ **Kvalita** - detaily robia rozdiel
+- ❌ "2 otázok" je **gramaticky nesprávne** a neprofesionálne
+- ❌ Zlé skloňovanie pôsobí amatérsky
+
+#### Ďalšie slová na skloňovanie
+
+Rovnaké pravidlo platí pre ďalšie slová s podobným skloňovaním:
+- **test:** 1 test, 2-4 testy, 5+ testov
+- **pokus:** 1 pokus, 2-4 pokusy, 5+ pokusov
+- **bod:** 1 bod, 2-4 body, 5+ bodov
+- **minúta:** 1 minúta, 2-4 minúty, 5+ minút
+
+**Vytvoriť helper funkciu pre každý typ slova:**
+
+```typescript
+function getTestWord(count: number) {
+  if (count === 1) return 'test'
+  if (count >= 2 && count <= 4) return 'testy'
+  return 'testov'
+}
+
+function getAttemptWord(count: number) {
+  if (count === 1) return 'pokus'
+  if (count >= 2 && count <= 4) return 'pokusy'
+  return 'pokusov'
+}
+
+function getPointWord(count: number) {
+  if (count === 1) return 'bod'
+  if (count >= 2 && count <= 4) return 'body'
+  return 'bodov'
+}
+
+function getMinuteWord(count: number) {
+  if (count === 1) return 'minúta'
+  if (count >= 2 && count <= 4) return 'minúty'
+  return 'minút'
+}
+```
 
 ---
 

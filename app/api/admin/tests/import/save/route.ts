@@ -77,6 +77,22 @@ export async function POST(request: NextRequest) {
 
     // Validate each question has exactly 1 correct answer
     for (const question of questions) {
+      // Validate questionType exists
+      if (!question.questionType) {
+        return NextResponse.json(
+          { error: `Otázka ${question.order} musí mať definovaný typ otázky` },
+          { status: 400 }
+        )
+      }
+
+      // Validate questionType is in allowedQuestionTypes
+      if (!allowedQuestionTypes.includes(question.questionType)) {
+        return NextResponse.json(
+          { error: `Otázka ${question.order} má nepovolený typ "${question.questionType}". Povolené typy pre tento test: ${allowedQuestionTypes.join(', ')}` },
+          { status: 400 }
+        )
+      }
+
       const correctAnswers = question.answers.filter((a: any) => a.isCorrect)
       if (correctAnswers.length !== 1) {
         return NextResponse.json(

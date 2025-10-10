@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
         type: true,
         description: true,
         questions: true,
+        allowedQuestionTypes: true,
         recommendedQuestionCount: true,
         recommendedDuration: true,
         recommendedScore: true,
@@ -132,6 +133,7 @@ export async function GET(request: NextRequest) {
         type: test.type,
         description: test.description,
         questionCount: questions.length,
+        allowedQuestionTypes: test.allowedQuestionTypes,
         recommendedDuration: test.recommendedDuration,
         recommendedQuestionCount: test.recommendedQuestionCount,
         recommendedScore: test.recommendedScore,
@@ -161,10 +163,10 @@ export async function GET(request: NextRequest) {
       pages
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching tests:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch tests' },
+      { error: 'Failed to fetch tests', details: error.message || error.toString() },
       { status: 500 }
     )
   }

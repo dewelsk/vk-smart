@@ -81,14 +81,14 @@ npm run test:e2e
 - ✅ IDSK komponenty rendering
 - ✅ Error states a edge cases
 
-**Backend (API testy):**
-- ✅ Všetky API endpoints
-- ✅ Autentifikácia a autorizácia
-- ✅ Input validácia (Zod schemas)
-- ✅ Business logika (bodovanie, vyhodnotenie)
-- ✅ Databázové operácie (CRUD)
-- ✅ File upload/download
-- ✅ PDF generovanie
+**Backend (Databázové testy):**
+- ✅ Databázové modely (Prisma)
+- ✅ Relations medzi entitami
+- ✅ Database constraints (unique, foreign keys)
+- ✅ Cascade delete správanie
+- ✅ Business logika na úrovni DB (bodovanie, vyhodnotenie)
+- ✅ CRUD operácie
+- ⚠️ **API routes NIE SÚ testované v backend testoch** (testujú sa v E2E testoch)
 
 **Integračné testy:**
 - ✅ Frontend + Backend integrácia
@@ -475,6 +475,230 @@ import testData from './test-data.json';
 
 export const TEST_USERS = testData.users;
 export const TEST_VK = testData.vk;
+```
+
+---
+
+## Backend testovanie - Prístup Prisma vs. HTTP API
+
+### Súčasný prístup v projekte
+
+**Backend testy používajú PRIAMO Prisma klienta**, nie HTTP API endpointy.
+
+```typescript
+// ✅ SPRÁVNE - Súčasný prístup (Prisma)
+import { prisma } from '@/lib/prisma'
+
+test('should create VKTest successfully', async () => {
+  const vkTest = await prisma.vKTest.create({
+    data: {
+      vkId,
+      testId: test1Id,
+      level: 1,
+      questionCount: 5,
+      durationMinutes: 10,
+      scorePerQuestion: 1,
+      minScore: 3
+    }
+  })
+
+  expect(vkTest).toBeDefined()
+  expect(vkTest.level).toBe(1)
+})
+```
+
+```typescript
+// ❌ NEPOUŽÍVAME - HTTP API prístup
+const response = await fetch('http://localhost:5600/api/admin/vk/[id]/tests', {
+  method: 'POST',
+  body: JSON.stringify({ ... })
+})
+```
+
+### Prečo tento prístup?
+
+**Backend testy (Prisma) = Unit/Integration testy databázovej vrstvy**
+
+**Čo testujeme:**
+- ✅ Databázové modely a ich správanie
+- ✅ Relations medzi entitami (foreign keys)
+- ✅ Database constraints (unique, not null)
+- ✅ Cascade delete správanie
+- ✅ Business logika na úrovni DB
+- ✅ CRUD operácie
+- ✅ Query performance
+
+**Čo NETESTUJEME v backend testoch:**
+- ❌ API routes (`/api/admin/...`)
+- ❌ HTTP validácia (status codes, error messages)
+- ❌ Middleware (autentifikácia, autorizácia)
+- ❌ Request/Response transformácie
+- ❌ API validačné schémy (Zod)
+
+### Kde sa testuje API?
+
+**API routes a validácia sa testujú v E2E testoch (Playwright):**
+
+```typescript
+// tests/e2e/admin/vk-tests.spec.ts
+test('should fail if minScore exceeds maxScore', async ({ page }) => {
+  await page.goto('/vk/123/tests')
+  await page.getByTestId('add-test-button').click()
+
+  // Fill form with invalid data
+  await page.getByTestId('question-count-input').fill('5')
+  await page.getByTestId('score-per-question-radio').check('1')
+  await page.getByTestId('min-score-input').fill('10')  // Max is 5 (5*1)
+
+  await page.getByTestId('save-test-button').click()
+
+  // Expect validation error
+  await expect(page.getByTestId('min-score-error')).toBeVisible()
+  await expect(page.getByTestId('min-score-error')).toContainText(
+    'nemôže presiahnuť maximálne skóre'
+  )
+})
+```
+
+### Výhody Prisma prístupu
+
+**✅ Rýchlosť:**
+- Priame DB operácie (bez HTTP overhead)
+- Rýchlejšie spúšťanie testov (sekundy vs. minúty)
+
+**✅ Jednoduchost:**
+- Žiadna autentifikácia/autorizácia setup
+- Žiadne HTTP mocking
+- Priamy prístup k DB
+
+**✅ Izolácia:**
+- Testuje len DB vrstvu
+- Nezávislé od API implementácie
+- Jednoduchšie debugovanie
+
+**✅ Konzistencia:**
+- Všetky backend testy v projekte používajú tento prístup
+- Jednotný pattern
+
+### Nevýhody Prisma prístupu
+
+**❌ Netestuje celý stack:**
+- API routes môžu mať bugy
+- Validácia v API nie je testovaná
+- Middleware nie je testovaný
+
+**❌ Duplicita validácie:**
+- Validácia musí byť aj v API aj v DB
+- Môžu vzniknúť nesúlady
+
+**Riešenie:** E2E testy pokrývajú celý stack (UI → API → DB), takže API validácia a middleware sú otestované tam.
+
+### Príklady backend testov
+
+**Test súbor:** `tests/backend/vk-tests-api.test.ts`
+
+**Testované oblasti:**
+
+1. **CRUD operácie:**
+   - Create VKTest
+   - List VKTests ordered by level
+   - Update VKTest
+   - Delete VKTest
+
+2. **Validačné constraints:**
+   - Unique level per VK
+   - Different VKs can have same level
+   - Cascade delete when VK is deleted
+
+3. **Business logika:**
+   - scorePerQuestion (0.5 or 1)
+   - maxScore calculation (questionCount * scorePerQuestion)
+   - Question selection modes (RANDOM, SEQUENTIAL, MANUAL)
+
+4. **Relations:**
+   - VKTest → Test
+   - VKTest → VK
+   - VK with assigned tests
+
+### Kontrolný zoznam pre backend testy
+
+Pri vytváraní nových backend testov:
+
+- [ ] Používam **Prisma klienta**, nie HTTP fetch
+- [ ] Testujem **DB constraints** (unique, foreign keys)
+- [ ] Testujem **cascade delete** správanie
+- [ ] Testujem **relations** medzi entitami
+- [ ] Testujem **business logiku** na úrovni DB
+- [ ] Pridávam **cleanup** v `afterEach`/`afterAll`
+- [ ] Používam **Date.now()** pre unikátne názvy
+- [ ] API validáciu nechávam na **E2E testy**
+
+### Príklad kompletného backend testu
+
+```typescript
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
+import { prisma } from '@/lib/prisma'
+
+describe('VK Tests API', () => {
+  let vkId: string
+  let testId: string
+
+  beforeAll(async () => {
+    await prisma.$connect()
+
+    // Setup test data
+    const vk = await prisma.vyberoveKonanie.create({
+      data: {
+        identifier: 'VK/' + Date.now(),
+        // ... other fields
+      }
+    })
+    vkId = vk.id
+  })
+
+  afterAll(async () => {
+    // Cleanup
+    if (vkId) {
+      await prisma.vyberoveKonanie.delete({ where: { id: vkId } })
+    }
+    await prisma.$disconnect()
+  })
+
+  describe('CRUD Operations', () => {
+    it('should create VKTest', async () => {
+      const vkTest = await prisma.vKTest.create({
+        data: {
+          vkId,
+          testId,
+          level: 1,
+          questionCount: 5,
+          durationMinutes: 10,
+          scorePerQuestion: 1,
+          minScore: 3
+        }
+      })
+
+      expect(vkTest).toBeDefined()
+      expect(vkTest.level).toBe(1)
+    })
+  })
+
+  describe('Validation', () => {
+    it('should enforce unique level per VK', async () => {
+      // Create level 1
+      await prisma.vKTest.create({
+        data: { vkId, testId, level: 1, /* ... */ }
+      })
+
+      // Try to create another level 1 - should fail
+      await expect(
+        prisma.vKTest.create({
+          data: { vkId, testId, level: 1, /* ... */ }
+        })
+      ).rejects.toThrow()
+    })
+  })
+})
 ```
 
 ---

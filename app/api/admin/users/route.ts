@@ -110,6 +110,11 @@ export async function GET(request: NextRequest) {
               institution: true,
             },
           },
+          userRoles: {
+            include: {
+              institution: true,
+            },
+          },
           gestorVKs: {
             select: { id: true },
           },
@@ -135,6 +140,13 @@ export async function GET(request: NextRequest) {
         id: ui.institution.id,
         code: ui.institution.code,
         name: ui.institution.name,
+      })),
+      roles: user.userRoles.map((ur) => ({
+        id: ur.id,
+        role: ur.role,
+        institutionId: ur.institutionId,
+        institutionName: ur.institution?.name || null,
+        assignedAt: ur.assignedAt,
       })),
       vkCount: user.gestorVKs.length,
     }))

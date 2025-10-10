@@ -29,6 +29,7 @@ type ParsedQuestion = {
   order: number
   text: string
   points: number
+  questionType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'OPEN_ENDED'
   status: 'confirmed' | 'needs_review' | 'unconfirmed'
   warning?: string
   answers: ParsedAnswer[]
@@ -40,6 +41,12 @@ type ParsedTest = {
   confirmedQuestions: number
   needsReview: number
   questions: ParsedQuestion[]
+}
+
+function getQuestionWord(count: number) {
+  if (count === 1) return 'otázka'
+  if (count >= 2 && count <= 4) return 'otázky'
+  return 'otázok'
 }
 
 export default function ImportTestsPage() {
@@ -122,10 +129,10 @@ export default function ImportTestsPage() {
         return
       }
 
-      toast.success(`Rozpoznaných ${data.parsed.totalQuestions} otázok`)
+      toast.success(`Rozpoznaných ${data.parsed.totalQuestions} ${getQuestionWord(data.parsed.totalQuestions)}`)
 
       if (data.parsed.needsReview > 0) {
-        toast.warning(`${data.parsed.needsReview} otázok vyžaduje kontrolu`)
+        toast.warning(`${data.parsed.needsReview} ${getQuestionWord(data.parsed.needsReview)} vyžaduje kontrolu`)
       }
 
       setParsedTest(data.parsed)
@@ -196,6 +203,17 @@ export default function ImportTestsPage() {
 
     setEditingQuestion(null)
     toast.success('Otázka upravená')
+  }
+
+  const updateQuestionType = (questionId: string, questionType: string) => {
+    if (!parsedTest) return
+
+    setParsedTest({
+      ...parsedTest,
+      questions: parsedTest.questions.map(q =>
+        q.id === questionId ? { ...q, questionType: questionType as ParsedQuestion['questionType'] } : q
+      ),
+    })
   }
 
   const validate = () => {
@@ -363,7 +381,7 @@ export default function ImportTestsPage() {
                 <p data-testid="total-questions-count" className="text-2xl font-bold text-green-900">
                   {parsedTest.totalQuestions}
                 </p>
-                <p className="text-sm text-green-700">otázok</p>
+                <p className="text-sm text-green-700">{getQuestionWord(parsedTest.totalQuestions)}</p>
               </div>
             </div>
             <div className="mt-4 flex gap-6 text-sm">
@@ -675,9 +693,33 @@ export default function ImportTestsPage() {
 
                   <p className="text-gray-900 mb-3">{question.text}</p>
 
-                  <p className="text-sm text-gray-600 mb-3">
-                    Body: {question.points}
-                  </p>
+                  <div className="flex items-center gap-4 mb-3">
+                    <p className="text-sm text-gray-600">
+                      Body: {question.points}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-gray-600">Typ otázky:</label>
+                      <select
+                        value={question.questionType}
+                        onChange={(e) => updateQuestionType(question.id, e.target.value)}
+                        className="text-sm border border-gray-300 rounded px-2 py-1"
+                        data-testid={`question-type-select-${index}`}
+                      >
+                        {allowedQuestionTypes.includes('SINGLE_CHOICE') && (
+                          <option value="SINGLE_CHOICE">Jednovýberová</option>
+                        )}
+                        {allowedQuestionTypes.includes('MULTIPLE_CHOICE') && (
+                          <option value="MULTIPLE_CHOICE">Viacvýberová</option>
+                        )}
+                        {allowedQuestionTypes.includes('TRUE_FALSE') && (
+                          <option value="TRUE_FALSE">Pravda/Nepravda</option>
+                        )}
+                        {allowedQuestionTypes.includes('OPEN_ENDED') && (
+                          <option value="OPEN_ENDED">Otvorená</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
 
                   <div className="space-y-2 mb-3">
                     <p className="text-sm font-medium text-gray-700">Odpovede:</p>
@@ -773,6 +815,31 @@ export default function ImportTestsPage() {
                   rows={3}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Typ otázky *
+                </label>
+                <select
+                  data-testid="edit-question-type"
+                  value={editingQuestion.questionType}
+                  onChange={(e) => setEditingQuestion({ ...editingQuestion, questionType: e.target.value as ParsedQuestion['questionType'] })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {allowedQuestionTypes.includes('SINGLE_CHOICE') && (
+                    <option value="SINGLE_CHOICE">Jednovýberová</option>
+                  )}
+                  {allowedQuestionTypes.includes('MULTIPLE_CHOICE') && (
+                    <option value="MULTIPLE_CHOICE">Viacvýberová</option>
+                  )}
+                  {allowedQuestionTypes.includes('TRUE_FALSE') && (
+                    <option value="TRUE_FALSE">Pravda/Nepravda</option>
+                  )}
+                  {allowedQuestionTypes.includes('OPEN_ENDED') && (
+                    <option value="OPEN_ENDED">Otvorená</option>
+                  )}
+                </select>
               </div>
 
               <div>

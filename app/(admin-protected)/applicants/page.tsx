@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import Select from 'react-select'
 import { DataTable } from '@/components/table/DataTable'
 import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
@@ -21,7 +20,6 @@ const statusOptions: StatusOption[] = [
 ]
 
 export default function ApplicantsPage() {
-  const router = useRouter()
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [archivedFilter, setArchivedFilter] = useState<StatusOption>(statusOptions[1])

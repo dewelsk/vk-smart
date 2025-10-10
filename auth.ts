@@ -42,6 +42,11 @@ export const authConfig: NextAuthConfig = {
                   institution: true,
                 },
               },
+              userRoles: {
+                include: {
+                  institution: true,
+                },
+              },
             },
           })
 
@@ -74,6 +79,11 @@ export const authConfig: NextAuthConfig = {
               code: ui.institution.code,
               name: ui.institution.name,
             })),
+            roles: user.userRoles.map((ur) => ({
+              role: ur.role,
+              institutionId: ur.institutionId,
+              institutionName: ur.institution?.name || null,
+            })),
           }
         } catch (error) {
           console.error('Authorization error:', error)
@@ -98,6 +108,7 @@ export const authConfig: NextAuthConfig = {
         token.username = user.username
         token.role = user.role
         token.institutions = user.institutions
+        token.roles = user.roles
       }
       return token
     },
@@ -110,6 +121,11 @@ export const authConfig: NextAuthConfig = {
           id: string
           code: string
           name: string
+        }>
+        session.user.roles = token.roles as Array<{
+          role: UserRole
+          institutionId: string | null
+          institutionName: string | null
         }>
       }
       return session

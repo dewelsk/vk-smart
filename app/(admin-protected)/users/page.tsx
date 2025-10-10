@@ -5,9 +5,11 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Select from 'react-select'
 import { DataTable } from '@/components/table/DataTable'
+import { RoleBadge } from '@/components/RoleBadge'
 import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useUsers, type User } from '@/hooks/useUsers'
+import { UserRole } from '@prisma/client'
 
 type RoleOption = {
   value: string
@@ -21,27 +23,6 @@ const roleOptions: RoleOption[] = [
   { value: 'KOMISIA', label: 'Komisia' },
 ]
 
-function getRoleBadge(role: string) {
-  const colors: Record<string, string> = {
-    SUPERADMIN: 'bg-purple-100 text-purple-800',
-    ADMIN: 'bg-blue-100 text-blue-800',
-    GESTOR: 'bg-green-100 text-green-800',
-    KOMISIA: 'bg-orange-100 text-orange-800',
-  }
-
-  const labels: Record<string, string> = {
-    SUPERADMIN: 'Superadmin',
-    ADMIN: 'Admin',
-    GESTOR: 'Gestor',
-    KOMISIA: 'Komisia',
-  }
-
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[role] || 'bg-gray-100 text-gray-800'}`}>
-      {labels[role] || role}
-    </span>
-  )
-}
 
 export default function UsersPage() {
   const router = useRouter()
@@ -100,17 +81,35 @@ export default function UsersPage() {
     },
     {
       accessorKey: 'role',
-      header: 'Rola',
-      cell: ({ row }) => getRoleBadge(row.original.role),
+      header: 'Role',
+      cell: ({ row }) => {
+        const user = row.original
+        // If user has multiple roles, show them all
+        if (user.roles && user.roles.length > 0) {
+          return (
+            <div className="flex flex-wrap gap-1" data-testid={`user-roles-${user.id}`}>
+              {user.roles.map((r) => (
+                <RoleBadge
+                  key={r.id}
+                  role={r.role as UserRole}
+                  size="sm"
+                />
+              ))}
+            </div>
+          )
+        }
+        // Backward compatibility: show primary role if no multi-role assignments
+        return <RoleBadge role={user.role as UserRole} size="sm" />
+      },
     },
     {
       id: 'institutions',
       header: 'Rezort',
       cell: ({ row }) => {
         const institutions = row.original.institutions
-        if (institutions.length === 0) return '-'
-        if (institutions.length === 1) return institutions[0].code
-        return `${institutions.length} rezorty`
+        if (institutions.length === 0) return <span className="text-gray-400">-</span>
+        // Show only institution code
+        return <span className="text-sm font-medium text-gray-900">{institutions[0].code}</span>
       },
     },
     {

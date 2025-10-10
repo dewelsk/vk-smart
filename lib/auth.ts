@@ -25,19 +25,67 @@ export async function isAuthenticated() {
 }
 
 /**
- * Check if user has specific role
+ * Check if user has specific role (can be global or institution-specific)
  */
-export async function hasRole(role: UserRole) {
+export async function hasRole(role: UserRole, institutionId?: string) {
   const user = await getCurrentUser()
-  return user?.role === role
+  if (!user) return false
+
+  // Check primary role for backward compatibility
+  if (user.role === role) return true
+
+  // Check multi-role assignments
+  return user.roles?.some(r => {
+    if (r.role !== role) return false
+    if (institutionId && r.institutionId !== institutionId) return false
+    return true
+  }) ?? false
 }
 
 /**
- * Check if user has any of the specified roles
+ * Check if user has any of the specified roles (can be global or institution-specific)
  */
-export async function hasAnyRole(roles: UserRole[]) {
+export async function hasAnyRole(roles: UserRole[], institutionId?: string) {
   const user = await getCurrentUser()
-  return user && roles.includes(user.role)
+  if (!user) return false
+
+  // Check primary role for backward compatibility
+  if (roles.includes(user.role)) return true
+
+  // Check multi-role assignments
+  return user.roles?.some(r => {
+    if (!roles.includes(r.role)) return false
+    if (institutionId && r.institutionId !== institutionId) return false
+    return true
+  }) ?? false
+}
+
+/**
+ * Check if user has all of the specified roles
+ */
+export async function hasAllRoles(roles: UserRole[], institutionId?: string) {
+  const user = await getCurrentUser()
+  if (!user) return false
+
+  return roles.every(role => {
+    // Check primary role
+    if (user.role === role) return true
+
+    // Check multi-role assignments
+    return user.roles?.some(r => {
+      if (r.role !== role) return false
+      if (institutionId && r.institutionId !== institutionId) return false
+      return true
+    }) ?? false
+  })
+}
+
+/**
+ * Get all user's roles
+ */
+export async function getUserRoles() {
+  const user = await getCurrentUser()
+  return user?.roles ?? []
 }
 
 /**
