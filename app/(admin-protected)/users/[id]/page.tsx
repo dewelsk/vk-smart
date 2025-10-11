@@ -11,18 +11,9 @@ import { RoleBadge } from '@/components/RoleBadge'
 import { RoleAssignmentModal } from '@/components/RoleAssignmentModal'
 import { ConfirmModal } from '@/components/ConfirmModal'
 
-type Institution = {
-  id: string
-  code: string
-  name: string
-  assignedAt: string
-}
-
 type RoleAssignment = {
   id: string
   role: UserRole
-  institutionId: string | null
-  institutionName: string | null
   assignedAt: string
   assignedBy: string | null
 }
@@ -48,7 +39,6 @@ type User = {
   createdAt: string
   updatedAt: string
   lastLoginAt: string | null
-  institutions: Institution[]
   roles: RoleAssignment[]
   vkCount: number
   recentVKs: VK[]
@@ -171,7 +161,7 @@ export default function UserDetailPage() {
           <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-3xl font-bold text-gray-900" data-testid="user-name">
+          <h1 data-testid="page-title" className="text-3xl font-bold text-gray-900">
             {user.name} {user.surname}
           </h1>
           <p className="mt-1 text-gray-600" data-testid="user-username">
@@ -260,7 +250,7 @@ export default function UserDetailPage() {
         <ConfirmModal
           isOpen={true}
           title="Odstrániť rolu"
-          message={`Naozaj chcete odstrániť rolu "${roleToDelete.role}"${roleToDelete.institutionName ? ` pre inštitúciu "${roleToDelete.institutionName}"` : ''}?`}
+          message={`Naozaj chcete odstrániť rolu "${roleToDelete.role}"?`}
           confirmLabel="Odstrániť"
           cancelLabel="Zrušiť"
           variant="danger"
@@ -328,34 +318,6 @@ function OverviewTab({ user }: { user: User }) {
           </div>
         </dl>
       </div>
-
-      {/* Institution - Single rezort only */}
-      {user.institutions && user.institutions.length > 0 && (
-        <div>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Rezort</h3>
-          <div className="p-4 border border-gray-200 rounded-md bg-gray-50" data-testid="institution-info">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-900">{user.institutions[0].name}</p>
-                <p className="text-xs text-gray-500">{user.institutions[0].code}</p>
-              </div>
-              <span className="text-xs text-gray-400">
-                Priradené: {new Date(user.institutions[0].assignedAt).toLocaleDateString('sk-SK')}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Note */}
-      {user.note && (
-        <div>
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Poznámka</h3>
-          <div className="p-4 border border-gray-200 rounded-md bg-gray-50" data-testid="user-note">
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{user.note}</p>
-          </div>
-        </div>
-      )}
 
       {/* Recent VKs */}
       {user.recentVKs && user.recentVKs.length > 0 && (
@@ -444,7 +406,6 @@ function RolesTab({
               <div className="flex items-center gap-3">
                 <RoleBadge
                   role={roleAssignment.role}
-                  institutionName={roleAssignment.institutionName}
                   size="md"
                 />
                 <div className="text-sm text-gray-500">

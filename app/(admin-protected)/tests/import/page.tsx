@@ -49,46 +49,245 @@ function getQuestionWord(count: number) {
   return 'otázok'
 }
 
+// Edit Import Question Modal - s rovnakými validáciami ako v test detail
+function EditImportQuestionModal({
+  question,
+  onClose,
+  onSave,
+}: {
+  question: ParsedQuestion
+  onClose: () => void
+  onSave: (question: ParsedQuestion) => void
+}) {
+  const [editedQuestion, setEditedQuestion] = useState({
+    ...question,
+    answers: [...question.answers],
+  })
+  const [errors, setErrors] = useState<{ text?: string; answers?: string }>({})
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleAnswerChange = (index: number, field: 'text' | 'isCorrect', value: string | boolean) => {
+    const updatedAnswers = editedQuestion.answers.map((answer, i) => {
+      if (i === index) {
+        if (field === 'isCorrect' && value === true) {
+          return { ...answer, isCorrect: true }
+        }
+        return { ...answer, [field]: value }
+      } else if (field === 'isCorrect' && value === true) {
+        return { ...answer, isCorrect: false }
+      }
+      return answer
+    })
+    setEditedQuestion({ ...editedQuestion, answers: updatedAnswers })
+    if (errors.answers) {
+      setErrors({ ...errors, answers: undefined })
+    }
+  }
+
+  const validate = () => {
+    const newErrors: { text?: string; answers?: string } = {}
+
+    // Validate question text
+    if (!editedQuestion.text.trim()) {
+      newErrors.text = 'Text otázky je povinný'
+    }
+
+    // Validate exactly 3 answers
+    if (editedQuestion.answers.length !== 3) {
+      newErrors.answers = 'Otázka musí mať presne 3 odpovede'
+    } else {
+      // Validate all answers have text
+      const emptyAnswers = editedQuestion.answers.filter(a => !a.text.trim())
+      if (emptyAnswers.length > 0) {
+        newErrors.answers = 'Všetky odpovede musia byť vyplnené'
+      } else {
+        // Validate exactly one correct answer
+        const correctAnswers = editedQuestion.answers.filter(a => a.isCorrect)
+        if (correctAnswers.length === 0) {
+          newErrors.answers = 'Aspoň jedna odpoveď musí byť označená ako správna'
+        } else if (correctAnswers.length > 1) {
+          newErrors.answers = 'Len jedna odpoveď môže byť označená ako správna'
+        }
+      }
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSave = async () => {
+    if (!validate()) {
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      await onSave(editedQuestion)
+      onClose()
+    } catch (error) {
+      console.error('Error saving question:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Upraviť otázku</h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Text otázky *
+            </label>
+            <textarea
+              data-testid="edit-question-text"
+              value={editedQuestion.text}
+              onChange={(e) => {
+                setEditedQuestion({ ...editedQuestion, text: e.target.value })
+                if (errors.text) {
+                  setErrors({ ...errors, text: undefined })
+                }
+              }}
+              rows={3}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 ${
+                errors.text
+                  ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
+                  : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+              }`}
+            />
+            {errors.text && (
+              <p className="mt-2 text-sm text-red-600">{errors.text}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Odpovede (presne 3) *
+            </label>
+            <div className="space-y-2">
+              {editedQuestion.answers.map((answer, index) => (
+                <div key={answer.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={answer.isCorrect}
+                    onChange={(e) => handleAnswerChange(index, 'isCorrect', e.target.checked)}
+                    className="h-4 w-4 text-blue-600"
+                  />
+                  <span className="text-sm font-medium w-6">{answer.letter})</span>
+                  <input
+                    type="text"
+                    value={answer.text}
+                    onChange={(e) => handleAnswerChange(index, 'text', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-500"
+                    placeholder="Zadajte text odpovede"
+                  />
+                </div>
+              ))}
+            </div>
+            {errors.answers && (
+              <p className="mt-2 text-sm text-red-600">{errors.answers}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            data-testid="cancel-edit-button"
+            onClick={onClose}
+            disabled={isSaving}
+            className="px-4 py-2 text-sm font-medium border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50"
+          >
+            Zrušiť
+          </button>
+          <button
+            data-testid="save-edit-button"
+            onClick={handleSave}
+            disabled={
+              isSaving ||
+              editedQuestion.answers.length !== 3 ||
+              editedQuestion.answers.some(a => !a.text.trim())
+            }
+            className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? 'Ukladám...' : 'Uložiť'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ImportTestsPage() {
   const router = useRouter()
   const [uploading, setUploading] = useState(false)
   const [parsedTest, setParsedTest] = useState<ParsedTest | null>(null)
   const [testName, setTestName] = useState('')
-  const [categoryId, setCategoryId] = useState('')
+  const [testTypeId, setTestTypeId] = useState('')
+  const [testTypeConditionId, setTestTypeConditionId] = useState('')
   const [duration, setDuration] = useState(45)
-  const [difficulty, setDifficulty] = useState(5)
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
+  const [testTypes, setTestTypes] = useState<{ id: string; name: string; description?: string }[]>([])
+  const [testTypeConditions, setTestTypeConditions] = useState<{ id: string; name: string }[]>([])
   const [editingQuestion, setEditingQuestion] = useState<ParsedQuestion | null>(null)
   const [pointsPerQuestion, setPointsPerQuestion] = useState(1)
   const [questionToDelete, setQuestionToDelete] = useState<ParsedQuestion | null>(null)
-  const [allowedQuestionTypes, setAllowedQuestionTypes] = useState<string[]>(['SINGLE_CHOICE'])
-  const [errors, setErrors] = useState<{ testName?: string; categoryId?: string; allowedQuestionTypes?: string }>({})
+  const [errors, setErrors] = useState<{ testName?: string; testTypeId?: string }>({})
   const [saving, setSaving] = useState(false)
 
   // Refs pre auto-scroll
   const testNameRef = useRef<HTMLInputElement>(null)
-  const categoryRef = useRef<HTMLSelectElement>(null)
+  const testTypeRef = useRef<HTMLSelectElement>(null)
 
   const refs = {
     testName: testNameRef,
-    categoryId: categoryRef,
+    testTypeId: testTypeRef,
   }
 
-  // Load categories on mount
+  // Load test types on mount
   useEffect(() => {
-    async function loadCategories() {
+    async function loadTestTypes() {
       try {
-        const res = await fetch('/api/admin/test-categories?limit=100')
+        const res = await fetch('/api/admin/test-types?limit=100')
         const data = await res.json()
         if (res.ok) {
-          setCategories(data.categories || [])
+          setTestTypes(data.testTypes || [])
         }
       } catch (error) {
-        console.error('Error loading categories:', error)
+        console.error('Error loading test types:', error)
       }
     }
-    loadCategories()
+    loadTestTypes()
   }, [])
+
+  // Load test type conditions when test type changes
+  useEffect(() => {
+    async function loadTestTypeConditions() {
+      if (!testTypeId) {
+        setTestTypeConditions([])
+        setTestTypeConditionId('')
+        return
+      }
+
+      try {
+        const res = await fetch(`/api/admin/test-types/${testTypeId}`)
+        const data = await res.json()
+        if (res.ok && data.conditions) {
+          setTestTypeConditions(data.conditions || [])
+          // Reset condition selection when test type changes
+          setTestTypeConditionId('')
+        } else {
+          setTestTypeConditions([])
+          setTestTypeConditionId('')
+        }
+      } catch (error) {
+        console.error('Error loading test type conditions:', error)
+        setTestTypeConditions([])
+        setTestTypeConditionId('')
+      }
+    }
+    loadTestTypeConditions()
+  }, [testTypeId])
 
   const onDrop = async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
@@ -205,19 +404,8 @@ export default function ImportTestsPage() {
     toast.success('Otázka upravená')
   }
 
-  const updateQuestionType = (questionId: string, questionType: string) => {
-    if (!parsedTest) return
-
-    setParsedTest({
-      ...parsedTest,
-      questions: parsedTest.questions.map(q =>
-        q.id === questionId ? { ...q, questionType: questionType as ParsedQuestion['questionType'] } : q
-      ),
-    })
-  }
-
   const validate = () => {
-    const newErrors: { testName?: string; categoryId?: string } = {}
+    const newErrors: { testName?: string; testTypeId?: string } = {}
 
     // Validate all questions confirmed
     const unconfirmed = parsedTest?.questions.filter(q => q.status !== 'confirmed') || []
@@ -231,12 +419,8 @@ export default function ImportTestsPage() {
       newErrors.testName = 'Názov testu je povinný'
     }
 
-    if (!categoryId) {
-      newErrors.categoryId = 'Kategória je povinná'
-    }
-
-    if (allowedQuestionTypes.length === 0) {
-      newErrors.allowedQuestionTypes = 'Aspoň jeden typ otázky musí byť vybraný'
+    if (!testTypeId) {
+      newErrors.testTypeId = 'Typ testu je povinný'
     }
 
     setErrors(newErrors)
@@ -269,11 +453,11 @@ export default function ImportTestsPage() {
     try {
       const payload = {
         name: testName,
-        categoryId,
+        testTypeId,
+        testTypeConditionId: testTypeConditionId || null,
         duration,
-        difficulty,
         totalPoints: parsedTest.totalQuestions * pointsPerQuestion,
-        allowedQuestionTypes,
+        allowedQuestionTypes: ['SINGLE_CHOICE'],
         questions: parsedTest.questions.map(q => ({
           ...q,
           points: pointsPerQuestion,
@@ -443,40 +627,62 @@ export default function ImportTestsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Kategória *
+                  Typ testu *
                 </label>
                 <select
-                  ref={categoryRef}
-                  data-testid="category-select"
-                  value={categoryId}
+                  ref={testTypeRef}
+                  data-testid="test-type-select"
+                  value={testTypeId}
                   onChange={(e) => {
-                    setCategoryId(e.target.value)
-                    if (errors.categoryId) {
-                      setErrors({ ...errors, categoryId: undefined })
+                    setTestTypeId(e.target.value)
+                    if (errors.testTypeId) {
+                      setErrors({ ...errors, testTypeId: undefined })
                     }
                   }}
                   className={`
                     w-full px-3 py-2 border rounded-md
                     focus:outline-none focus:ring-1
-                    ${errors.categoryId
+                    ${errors.testTypeId
                       ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
                       : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
                     }
                   `}
                 >
-                  <option value="">Vyberte kategóriu</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
+                  <option value="">Vyberte typ testu</option>
+                  {testTypes.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
                     </option>
                   ))}
                 </select>
-                {errors.categoryId && (
+                {errors.testTypeId && (
                   <p className="mt-2 text-sm text-red-600">
-                    {errors.categoryId}
+                    {errors.testTypeId}
                   </p>
                 )}
               </div>
+
+              {/* Podmienka typu testu - zobrazí sa len ak existujú podmienky */}
+              {testTypeConditions.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Podmienka typu testu
+                  </label>
+                  <select
+                    data-testid="test-type-condition-select"
+                    value={testTypeConditionId}
+                    onChange={(e) => setTestTypeConditionId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-500"
+                  >
+                    <option value="">Bez podmienky</option>
+                    {testTypeConditions.map((condition) => (
+                      <option key={condition.id} value={condition.id}>
+                        {condition.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -490,30 +696,6 @@ export default function ImportTestsPage() {
                   min="1"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-200 focus:border-blue-500"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Náročnosť testu *
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    data-testid="difficulty-slider"
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={difficulty}
-                    onChange={(e) => setDifficulty(parseInt(e.target.value))}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                  />
-                  <span className="text-lg font-semibold text-gray-900 w-8 text-center" data-testid="difficulty-value">
-                    {difficulty}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>Najľahší</span>
-                  <span>Najnáročnejší</span>
-                </div>
               </div>
 
               <div>
@@ -544,63 +726,7 @@ export default function ImportTestsPage() {
                 />
               </div>
 
-              {/* Allowed Question Types */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Povolené typy otázok *
-                </label>
-                <div
-                  data-testid="question-types-group"
-                  data-error={!!errors.allowedQuestionTypes}
-                  className={`
-                    border rounded-md p-4 space-y-3
-                    ${errors.allowedQuestionTypes ? 'border-red-500' : 'border-gray-300'}
-                  `}
-                >
-                  {[
-                    { value: 'SINGLE_CHOICE', label: 'Jednovýberová' },
-                    { value: 'MULTIPLE_CHOICE', label: 'Viacvýberová' },
-                    { value: 'TRUE_FALSE', label: 'Pravda/Nepravda' },
-                    { value: 'OPEN_ENDED', label: 'Otvorená' },
-                  ].map((option) => (
-                    <div key={option.value} className="flex items-center">
-                      <input
-                        id={`type-${option.value}`}
-                        data-testid={`question-type-${option.value.toLowerCase()}`}
-                        type="checkbox"
-                        checked={allowedQuestionTypes.includes(option.value)}
-                        onChange={() => {
-                          if (allowedQuestionTypes.includes(option.value)) {
-                            // Don't allow unchecking if it's the last one
-                            if (allowedQuestionTypes.length === 1) {
-                              return
-                            }
-                            setAllowedQuestionTypes(allowedQuestionTypes.filter(t => t !== option.value))
-                          } else {
-                            setAllowedQuestionTypes([...allowedQuestionTypes, option.value])
-                          }
-                          if (errors.allowedQuestionTypes) {
-                            setErrors({ ...errors, allowedQuestionTypes: undefined })
-                          }
-                        }}
-                        disabled={allowedQuestionTypes.includes(option.value) && allowedQuestionTypes.length === 1}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
-                      />
-                      <label htmlFor={`type-${option.value}`} className="ml-2 block text-sm text-gray-900">
-                        {option.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-                {errors.allowedQuestionTypes && (
-                  <p className="mt-2 text-sm text-red-600" data-testid="question-types-error">
-                    {errors.allowedQuestionTypes}
-                  </p>
-                )}
-                <p className="mt-2 text-xs text-gray-500">
-                  Aspoň jeden typ musí byť vybraný. Tieto typy budú dostupné pre otázky v tomto teste.
-                </p>
-              </div>
+              {/* Allowed Question Types - HIDDEN, všetky testy sú SINGLE_CHOICE */}
             </div>
 
             {/* Actions - Top */}
@@ -610,7 +736,8 @@ export default function ImportTestsPage() {
                 onClick={() => {
                   setParsedTest(null)
                   setTestName('')
-                  setCategoryId('')
+                  setTestTypeId('')
+                  setTestTypeConditionId('')
                 }}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
               >
@@ -693,33 +820,7 @@ export default function ImportTestsPage() {
 
                   <p className="text-gray-900 mb-3">{question.text}</p>
 
-                  <div className="flex items-center gap-4 mb-3">
-                    <p className="text-sm text-gray-600">
-                      Body: {question.points}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600">Typ otázky:</label>
-                      <select
-                        value={question.questionType}
-                        onChange={(e) => updateQuestionType(question.id, e.target.value)}
-                        className="text-sm border border-gray-300 rounded px-2 py-1"
-                        data-testid={`question-type-select-${index}`}
-                      >
-                        {allowedQuestionTypes.includes('SINGLE_CHOICE') && (
-                          <option value="SINGLE_CHOICE">Jednovýberová</option>
-                        )}
-                        {allowedQuestionTypes.includes('MULTIPLE_CHOICE') && (
-                          <option value="MULTIPLE_CHOICE">Viacvýberová</option>
-                        )}
-                        {allowedQuestionTypes.includes('TRUE_FALSE') && (
-                          <option value="TRUE_FALSE">Pravda/Nepravda</option>
-                        )}
-                        {allowedQuestionTypes.includes('OPEN_ENDED') && (
-                          <option value="OPEN_ENDED">Otvorená</option>
-                        )}
-                      </select>
-                    </div>
-                  </div>
+                  {/* Body a typ otázky - HIDDEN, centrálne nastavenie v teste */}
 
                   <div className="space-y-2 mb-3">
                     <p className="text-sm font-medium text-gray-700">Odpovede:</p>
@@ -779,7 +880,8 @@ export default function ImportTestsPage() {
               onClick={() => {
                 setParsedTest(null)
                 setTestName('')
-                setCategoryId('')
+                setTestTypeId('')
+                setTestTypeConditionId('')
               }}
               className="px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
             >
@@ -798,105 +900,7 @@ export default function ImportTestsPage() {
       )}
 
       {/* Edit Question Modal */}
-      {editingQuestion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Upraviť otázku</h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Text otázky *
-                </label>
-                <textarea
-                  data-testid="edit-question-text"
-                  value={editingQuestion.text}
-                  onChange={(e) => setEditingQuestion({ ...editingQuestion, text: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Typ otázky *
-                </label>
-                <select
-                  data-testid="edit-question-type"
-                  value={editingQuestion.questionType}
-                  onChange={(e) => setEditingQuestion({ ...editingQuestion, questionType: e.target.value as ParsedQuestion['questionType'] })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {allowedQuestionTypes.includes('SINGLE_CHOICE') && (
-                    <option value="SINGLE_CHOICE">Jednovýberová</option>
-                  )}
-                  {allowedQuestionTypes.includes('MULTIPLE_CHOICE') && (
-                    <option value="MULTIPLE_CHOICE">Viacvýberová</option>
-                  )}
-                  {allowedQuestionTypes.includes('TRUE_FALSE') && (
-                    <option value="TRUE_FALSE">Pravda/Nepravda</option>
-                  )}
-                  {allowedQuestionTypes.includes('OPEN_ENDED') && (
-                    <option value="OPEN_ENDED">Otvorená</option>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Odpovede
-                </label>
-                <div className="space-y-2">
-                  {editingQuestion.answers.map((answer, index) => (
-                    <div key={answer.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={answer.isCorrect}
-                        onChange={(e) => {
-                          const updatedAnswers = editingQuestion.answers.map((a, i) =>
-                            i === index ? { ...a, isCorrect: e.target.checked } : a
-                          )
-                          setEditingQuestion({ ...editingQuestion, answers: updatedAnswers })
-                        }}
-                        className="h-4 w-4 text-blue-600"
-                      />
-                      <span className="text-sm font-medium">{answer.letter})</span>
-                      <input
-                        type="text"
-                        value={answer.text}
-                        onChange={(e) => {
-                          const updatedAnswers = editingQuestion.answers.map((a, i) =>
-                            i === index ? { ...a, text: e.target.value } : a
-                          )
-                          setEditingQuestion({ ...editingQuestion, answers: updatedAnswers })
-                        }}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                data-testid="cancel-edit-button"
-                onClick={() => setEditingQuestion(null)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-              >
-                Zrušiť
-              </button>
-              <button
-                data-testid="save-edit-button"
-                onClick={() => saveEditedQuestion(editingQuestion)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Uložiť
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {editingQuestion && <EditImportQuestionModal question={editingQuestion} onClose={() => setEditingQuestion(null)} onSave={saveEditedQuestion} />}
 
       {/* Delete Question Confirm Modal */}
       <ConfirmModal

@@ -323,7 +323,7 @@ pm2 delete vk-retry
 
 ## Deployment Workflow
 
-### Manuálny deployment (MVP)
+### Optimalizovaný deployment (AKTUÁLNE)
 
 **Z lokálneho počítača:**
 
@@ -332,25 +332,40 @@ pm2 delete vk-retry
 ```
 
 Script automaticky:
-1. ✅ Rsync kódu na server
-2. ✅ SSH na server
-3. ✅ `npm ci --production=false`
-4. ✅ `npx prisma generate`
-5. ✅ `npx prisma migrate deploy`
-6. ✅ `npm run build`
-7. ✅ `pm2 reload` (graceful, zero-downtime)
-8. ✅ Health check
+1. ✅ Check git status (musí byť clean)
+2. ✅ **Build lokálne** (`npm run build`)
+3. ✅ Validate build (`.next/BUILD_ID` musí existovať)
+4. ✅ Create backup on server
+5. ✅ **Rsync kódu NA server (VRÁTANE `.next/`)**
+6. ✅ SSH na server
+7. ✅ `npm ci --production` (bez dev dependencies)
+8. ✅ `npx prisma generate`
+9. ✅ `npx prisma migrate deploy`
+10. ✅ `pm2 reload` (graceful, zero-downtime)
+11. ✅ Health check
+12. ✅ **Run smoke tests** (`npm run test:e2e:smoke`)
 
-**Deployment trvá ~2-3 minúty.**
+**Deployment trvá ~30-90 sekúnd.**
+
+### Výhody nového prístupu
+
+- ✅ **Build lokálne** - rýchlejší, konzistentný, overený
+- ✅ **Sync hotového buildu** - žiadne build problémy na serveri
+- ✅ **Production dependencies only** - menší footprint, rýchlejšia inštalácia
+- ✅ **Smoke tests** - overenie že deployment funguje
+- ✅ **Automatický backup** - posledných 5 verzií
+- ⚡ **3-6x rýchlejší** deployment (vs. build na serveri)
 
 ### Čo sa NESKOPÍRUJE (rsync excludes)
 
 - `node_modules/` (re-install na serveri)
-- `.next/` (re-build na serveri)
+- ~~`.next/`~~ ← **ZMENA: Teraz SA syncuje!**
 - `.git/`
 - `test-results/`
 - `playwright-report/`
 - `.env*` (env vars sú na serveri)
+- `docs/daily/`
+- `*.log`
 
 ---
 
@@ -666,8 +681,39 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
+## Deployment History & Improvements
+
+### Pôvodný prístup (deprecated)
+
+**Problémy:**
+- ❌ Build na serveri zlyháva (`prerender-manifest.json` missing)
+- ❌ Dlhý deployment (3-5 minút)
+- ❌ `rsync --delete` vymaže `.next/` pred buildom
+- ❌ Žiadne smoke testy po deploymenti
+- ❌ Build errors len na production (nie lokálne)
+
+**Čo sa robilo:**
+1. Rsync kódu (bez `.next/`)
+2. Build NA SERVERI (`npm run build`)
+3. PM2 reload
+4. Modlitba že to funguje 🙏
+
+### Nový prístup (2025-10-10)
+
+**Riešenie:**
+- ✅ Build LOKÁLNE (overený, konzistentný)
+- ✅ Sync hotového `.next/` directory
+- ✅ Server len restart (nie rebuild)
+- ✅ Smoke testy po deploymenti
+- ✅ Automatický backup pred deploymentom
+
+**Dokumentácia:** `docs/27-deployment-improvements.md`
+
+---
+
 ## Changelog
 
 | Dátum | Verzia | Zmeny |
 |-------|--------|-------|
+| 2025-10-10 | 2.0.0 | Deployment improvements: local build + smoke tests |
 | 2025-10-08 | 1.0.0 | Initial production setup |

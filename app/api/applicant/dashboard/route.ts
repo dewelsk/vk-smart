@@ -1,33 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-
-// Helper function to get candidate ID from request (simplified - in production use NextAuth session)
-async function getCandidateFromRequest(request: NextRequest) {
-  // In production, extract from session token/cookie
-  // For now, expect candidateId in Authorization header
-  const candidateId = request.headers.get('x-candidate-id')
-
-  if (!candidateId) {
-    return null
-  }
-
-  return await prisma.candidate.findUnique({
-    where: { id: candidateId },
-    include: {
-      vk: true,
-      user: true
-    }
-  })
-}
+import { getToken } from 'next-auth/jwt'
 
 export async function GET(request: NextRequest) {
   try {
-    const candidate = await getCandidateFromRequest(request)
-
-    if (!candidate) {
+    // Get current session
+    const session = await auth()
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Neautorizovaný prístup' },
         { status: 401 }
+      )
+    }
+
+    // Get token to check candidate type
+    const token = await getToken({
+      req: request,
+      secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+    })
+
+    if (!token || token.type !== 'candidate') {
+      return NextResponse.json(
+        { error: 'Prístup len pre uchádzačov' },
+        { status: 403 }
+      )
+    }
+
+    const candidateId = token.candidateId as string
+    const vkId = token.vkId as string
+
+    if (!candidateId || !vkId) {
+      return NextResponse.json(
+        { error: 'Neplatná session kandidáta' },
+        { status: 400 }
+      )
+    }
+
+    // Get candidate with VK info
+    const candidate = await prisma.candidate.findUnique({
+      where: { id: candidateId },
+      include: {
+        vk: true,
+      },
+    })
+
+    if (!candidate || candidate.deleted || !candidate.active) {
+      return NextResponse.json(
+        { error: 'Kandidát nenájdený alebo nie je aktívny' },
+        { status: 404 }
       )
     }
 
@@ -42,7 +63,22 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             name: true,
-            type: true
+            testTypeId: true,
+            testTypeConditionId: true,
+            testType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
+            testTypeCondition: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            }
           }
         }
       },
@@ -60,6 +96,11 @@ export async function GET(request: NextRequest) {
 
     // Build tests array with session data
     const tests = vkTests.map((vkTest, index) => {
+      console.log(`VKTest Level ${vkTest.level}:`, {
+        questionCount: vkTest.questionCount,
+        durationMinutes: vkTest.durationMinutes,
+        minScore: vkTest.minScore
+      })
       const session = sessions.find(s => s.vkTestId === vkTest.id)
 
       // Check if this level is locked
@@ -84,7 +125,22 @@ export async function GET(request: NextRequest) {
         test: {
           id: vkTest.test.id,
           name: vkTest.test.name,
-          type: vkTest.test.type
+          testTypeId: vkTest.test.testTypeId,
+          testType: vkTest.test.testType
+            ? {
+                id: vkTest.test.testType.id,
+                name: vkTest.test.testType.name,
+                description: vkTest.test.testType.description,
+              }
+            : null,
+          testTypeConditionId: vkTest.test.testTypeConditionId,
+          testTypeCondition: vkTest.test.testTypeCondition
+            ? {
+                id: vkTest.test.testTypeCondition.id,
+                name: vkTest.test.testTypeCondition.name,
+                description: vkTest.test.testTypeCondition.description,
+              }
+            : null
         },
         questionCount: vkTest.questionCount,
         durationMinutes: vkTest.durationMinutes,
@@ -109,8 +165,11 @@ export async function GET(request: NextRequest) {
 
         // Calculate answered questions count for IN_PROGRESS sessions
         if (session.status === 'IN_PROGRESS') {
-          const answers = session.answers as Record<string, any>
-          const answeredCount = Object.keys(answers).filter(key => answers[key] !== null && answers[key] !== undefined && answers[key] !== '').length
+          const answers = (session.answers as Record<string, any>) || {}
+          const answeredCount = Object.keys(answers).filter(key => {
+            const value = answers[key]
+            return value !== null && value !== undefined && value !== ''
+          }).length
           testData.session.answeredQuestions = answeredCount
         }
       } else {
@@ -128,7 +187,7 @@ export async function GET(request: NextRequest) {
         serviceField: vk.serviceField,
         position: vk.position,
         serviceType: vk.serviceType,
-        date: vk.date
+        date: vk.startDateTime
       },
       tests
     })

@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams
-    const type = searchParams.get('type')
+    const testTypeId = searchParams.get('type')
     const categoryId = searchParams.get('categoryId')
     const search = searchParams.get('search')
 
@@ -24,8 +24,8 @@ export async function GET(request: NextRequest) {
       practiceEnabled: true, // Only tests with practice enabled can be practiced
     }
 
-    if (type) {
-      where.type = type
+    if (testTypeId) {
+      where.testTypeId = testTypeId
     }
 
     if (categoryId) {
@@ -44,6 +44,20 @@ export async function GET(request: NextRequest) {
       where,
       orderBy: { name: 'asc' },
       include: {
+        testType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
+        testTypeCondition: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
         category: {
           select: {
             id: true,
@@ -92,7 +106,22 @@ export async function GET(request: NextRequest) {
       return {
         id: test.id,
         name: test.name,
-        type: test.type,
+        testTypeId: test.testTypeId,
+        testType: test.testType
+          ? {
+              id: test.testType.id,
+              name: test.testType.name,
+              description: test.testType.description,
+            }
+          : null,
+        testTypeConditionId: test.testTypeConditionId,
+        testTypeCondition: test.testTypeCondition
+          ? {
+              id: test.testTypeCondition.id,
+              name: test.testTypeCondition.name,
+              description: test.testTypeCondition.description,
+            }
+          : null,
         description: test.description,
         category: test.category,
         difficulty: test.difficulty,

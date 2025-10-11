@@ -104,7 +104,7 @@ export default function SecuritySettingsForm({ initialSettings }: SecuritySettin
               min={1}
               value={maxFailedAttempts}
               onChange={(event) => setMaxFailedAttempts(Number(event.target.value))}
-              className="rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-sm"
+              className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
               data-testid="input-max-failed-attempts"
             />
             <span className="text-xs text-gray-500">
@@ -119,7 +119,7 @@ export default function SecuritySettingsForm({ initialSettings }: SecuritySettin
               min={1}
               value={blockDurationMinutes}
               onChange={(event) => setBlockDurationMinutes(Number(event.target.value))}
-              className="rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-sm"
+              className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
               data-testid="input-block-duration"
             />
             <span className="text-xs text-gray-500">
@@ -134,7 +134,7 @@ export default function SecuritySettingsForm({ initialSettings }: SecuritySettin
               min={1}
               value={blockWindowMinutes}
               onChange={(event) => setBlockWindowMinutes(Number(event.target.value))}
-              className="rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-sm"
+              className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
               data-testid="input-block-window"
             />
             <span className="text-xs text-gray-500">

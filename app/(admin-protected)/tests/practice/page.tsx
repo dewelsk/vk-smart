@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Select from 'react-select'
@@ -15,6 +15,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { usePracticeTests } from '@/hooks/usePracticeTests'
 import { useTestCategories } from '@/hooks/useTestCategories'
+import { useTestTypes } from '@/hooks/useTestTypes'
 import { toast } from 'react-hot-toast'
 
 type TestTypeOption = {
@@ -22,43 +23,20 @@ type TestTypeOption = {
   label: string
 }
 
-const testTypeOptions: TestTypeOption[] = [
-  { value: 'ODBORNY', label: 'Odborný' },
-  { value: 'VSEOBECNY', label: 'Všeobecný' },
-  { value: 'STATNY_JAZYK', label: 'Štátny jazyk' },
-  { value: 'CUDZI_JAZYK', label: 'Cudzí jazyk' },
-  { value: 'IT_ZRUCNOSTI', label: 'IT zručnosti' },
-  { value: 'SCHOPNOSTI_VLASTNOSTI', label: 'Schopnosti a vlastnosti' },
-]
-
 function getQuestionWord(count: number) {
   if (count === 1) return 'otázka'
   if (count >= 2 && count <= 4) return 'otázky'
   return 'otázok'
 }
 
-function getTestTypeBadge(type: string) {
-  const colors: Record<string, string> = {
-    ODBORNY: 'bg-purple-100 text-purple-800',
-    VSEOBECNY: 'bg-blue-100 text-blue-800',
-    STATNY_JAZYK: 'bg-green-100 text-green-800',
-    CUDZI_JAZYK: 'bg-orange-100 text-orange-800',
-    IT_ZRUCNOSTI: 'bg-cyan-100 text-cyan-800',
-    SCHOPNOSTI_VLASTNOSTI: 'bg-pink-100 text-pink-800',
-  }
-
-  const labels: Record<string, string> = {
-    ODBORNY: 'Odborný',
-    VSEOBECNY: 'Všeobecný',
-    STATNY_JAZYK: 'Štátny jazyk',
-    CUDZI_JAZYK: 'Cudzí jazyk',
-    IT_ZRUCNOSTI: 'IT zručnosti',
-    SCHOPNOSTI_VLASTNOSTI: 'Schopnosti a vlastnosti',
+function getTestTypeBadge(testType: { id: string; name: string } | null | undefined) {
+  if (!testType) {
+    return <span className="text-gray-500">—</span>
   }
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[type] || 'bg-gray-100 text-gray-800'}`}>
-      {labels[type] || type}
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+      {testType.name}
     </span>
   )
 }
@@ -73,6 +51,7 @@ export default function PracticePage() {
 
   // Fetch categories for filter
   const { data: categoriesData } = useTestCategories({ limit: 100 })
+  const { data: testTypesData } = useTestTypes({ limit: 100 })
 
   // Debounce search input
   useEffect(() => {
@@ -86,15 +65,30 @@ export default function PracticePage() {
   // Use React Query hook
   const { data, isLoading, error } = usePracticeTests({
     search: debouncedSearch,
-    type: typeFilter?.value,
+    testTypeId: typeFilter?.value,
     categoryId: categoryFilter?.value,
   })
 
   // Build category options from fetched categories
-  const categoryOptions = categoriesData?.categories.map(cat => ({
-    value: cat.id,
-    label: cat.name
-  })) || []
+  const categoryOptions = useMemo(() => {
+    return categoriesData?.categories.map(cat => ({
+      value: cat.id,
+      label: cat.name
+    })) || []
+  }, [categoriesData])
+
+  const testTypeOptions = useMemo(() => {
+    return testTypesData?.testTypes.map(type => ({
+      value: type.id,
+      label: type.name,
+    })) || []
+  }, [testTypesData])
+
+  useEffect(() => {
+    if (typeFilter && !testTypeOptions.some(option => option.value === typeFilter.value)) {
+      setTypeFilter(null)
+    }
+  }, [typeFilter, testTypeOptions])
 
   const tests = data?.tests ?? []
 
@@ -214,7 +208,7 @@ export default function PracticePage() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-2" data-testid="test-name">
                     {test.name}
                   </h3>
-                  {getTestTypeBadge(test.type)}
+                  {getTestTypeBadge(test.testType)}
                 </div>
               </div>
 
@@ -232,6 +226,12 @@ export default function PracticePage() {
                 </div>
               )}
 
+              {test.testTypeCondition && (
+                <div className="text-sm text-gray-500 mb-4">
+                  Podmienka: <span className="font-medium">{test.testTypeCondition.name}</span>
+                </div>
+              )}
+
               {/* Test Stats */}
               <div className="space-y-2 mb-4">
                 <div className="flex items-center text-sm text-gray-600">
@@ -243,25 +243,6 @@ export default function PracticePage() {
                   <div className="flex items-center text-sm text-gray-600">
                     <ClockIcon className="h-4 w-4 mr-2" />
                     <span>{test.recommendedDuration} minút</span>
-                  </div>
-                )}
-
-                {test.difficulty && (
-                  <div className="flex items-center text-sm text-gray-600">
-                    <span className="mr-2">Náročnosť:</span>
-                    <div className="w-24 bg-gray-200 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full transition-all"
-                        style={{
-                          width: `${(test.difficulty / 10) * 100}%`,
-                          backgroundColor:
-                            test.difficulty <= 3 ? '#10B981' :
-                            test.difficulty <= 6 ? '#F59E0B' :
-                            '#EF4444'
-                        }}
-                      />
-                    </div>
-                    <span className="text-xs ml-2">{test.difficulty}/10</span>
                   </div>
                 )}
               </div>

@@ -51,13 +51,14 @@ export async function PATCH(
       )
     }
 
-    // Check VK status
-    if (existingVkTest.vk.status !== 'PRIPRAVA') {
-      return NextResponse.json(
-        { error: 'Testy možno upravovať len ak VK je v stave PRIPRAVA' },
-        { status: 400 }
-      )
-    }
+    // MVP: Allow editing tests in any VK status
+    // TODO: In production, restrict to PRIPRAVA only
+    // if (existingVkTest.vk.status !== 'PRIPRAVA') {
+    //   return NextResponse.json(
+    //     { error: 'Testy možno upravovať len ak VK je v stave PRIPRAVA' },
+    //     { status: 400 }
+    //   )
+    // }
 
     const questions = existingVkTest.test.questions as any[]
     const totalQuestions = questions.length
@@ -199,13 +200,14 @@ export async function DELETE(
       )
     }
 
-    // Check VK status
-    if (existingVkTest.vk.status !== 'PRIPRAVA') {
-      return NextResponse.json(
-        { error: 'Testy možno odstrániť len ak VK je v stave PRIPRAVA' },
-        { status: 400 }
-      )
-    }
+    // MVP: Allow deleting tests in any VK status
+    // TODO: In production, restrict to PRIPRAVA only
+    // if (existingVkTest.vk.status !== 'PRIPRAVA') {
+    //   return NextResponse.json(
+    //     { error: 'Testy možno odstrániť len ak VK je v stave PRIPRAVA' },
+    //     { status: 400 }
+    //   )
+    // }
 
     // Delete VKTest
     await prisma.vKTest.delete({

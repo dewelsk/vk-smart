@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 test.describe('Test Navigation @admin @test-navigation', () => {
   let testId: string
   let testName: string
+  let testTypeId: string
+  let testTypeConditionId: string | null
+  let testCategoryId: string
 
   test.beforeAll(async () => {
     await prisma.$connect()
@@ -17,11 +20,34 @@ test.describe('Test Navigation @admin @test-navigation', () => {
       throw new Error('No superadmin found in database')
     }
 
-    // Get or create test category
-    const testCategory = await prisma.testCategory.findFirst()
-    if (!testCategory) {
-      throw new Error('No test category found in database')
-    }
+    // Create dedicated test type and category
+    const testType = await prisma.testType.create({
+      data: {
+        name: 'E2E Navigation Test Type ' + Date.now(),
+        description: 'Test type for navigation spec',
+        conditions: {
+          create: [
+            {
+              name: 'Navigation podmienka',
+              description: 'Podmienka použita v e2e teste'
+            }
+          ]
+        }
+      },
+      include: {
+        conditions: true
+      }
+    })
+    testTypeId = testType.id
+    testTypeConditionId = testType.conditions[0]?.id ?? null
+
+    const testCategory = await prisma.testCategory.create({
+      data: {
+        name: 'E2E Navigation Category ' + Date.now(),
+        typeId: testTypeId
+      }
+    })
+    testCategoryId = testCategory.id
 
     // Create a test for navigation testing
     const timestamp = Date.now()
@@ -30,8 +56,9 @@ test.describe('Test Navigation @admin @test-navigation', () => {
     const test = await prisma.test.create({
       data: {
         name: testName,
-        type: 'ODBORNY',
-        categoryId: testCategory.id,
+        testTypeId,
+        testTypeConditionId,
+        categoryId: testCategoryId,
         description: 'Test for E2E navigation from list to detail',
         difficulty: 5,
         recommendedDuration: 60,
@@ -63,6 +90,12 @@ test.describe('Test Navigation @admin @test-navigation', () => {
     // Cleanup: Delete the test
     if (testId) {
       await prisma.test.delete({ where: { id: testId } }).catch(() => {})
+    }
+    if (testCategoryId) {
+      await prisma.testCategory.delete({ where: { id: testCategoryId } }).catch(() => {})
+    }
+    if (testTypeId) {
+      await prisma.testType.delete({ where: { id: testTypeId } }).catch(() => {})
     }
     await prisma.$disconnect()
   })
@@ -126,7 +159,6 @@ test.describe('Test Navigation @admin @test-navigation', () => {
     // Verify basic information
     await expect(page.getByTestId('test-name-input')).toHaveValue(testName)
     await expect(page.getByTestId('test-description-input')).toHaveValue('Test for E2E navigation from list to detail')
-    await expect(page.getByTestId('test-difficulty-value')).toHaveText('5')
     await expect(page.getByTestId('test-duration-input')).toHaveValue('60')
 
     // Verify question count

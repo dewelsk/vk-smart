@@ -46,13 +46,13 @@ export function ValidationStatusCard({
                 VK pripravené
               </h3>
               <p className="text-green-700 mb-4">
-                Všetky potrebné kroky sú dokončené. Môžete prejsť na stav "Čaká na testy".
+                Všetky potrebné kroky sú dokončené. Môžete spustiť výberové konanie.
               </p>
               <Link
                 href={`/vk/${vkId}?action=changeStatus&target=CAKA_NA_TESTY`}
                 className="inline-block px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
               >
-                → Prejsť na "Čaká na testy"
+                → Spustiť výberové konanie
               </Link>
             </div>
           </div>

@@ -102,18 +102,3 @@ export async function isAdminOrAbove() {
   return hasAnyRole([UserRole.SUPERADMIN, UserRole.ADMIN])
 }
 
-/**
- * Check if user belongs to specific institution
- */
-export async function belongsToInstitution(institutionId: string) {
-  const user = await getCurrentUser()
-  return user?.institutions.some((i) => i.id === institutionId) ?? false
-}
-
-/**
- * Get user's institutions
- */
-export async function getUserInstitutions() {
-  const user = await getCurrentUser()
-  return user?.institutions ?? []
-}

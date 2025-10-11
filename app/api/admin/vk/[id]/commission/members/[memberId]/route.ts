@@ -28,18 +28,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'VK not found' }, { status: 404 })
     }
 
-    // Check permissions for ADMIN
-    if (session.user.role === 'ADMIN') {
-      const userInstitutions = await prisma.userInstitution.findMany({
-        where: { userId: session.user.id },
-        select: { institutionId: true }
-      })
-      const institutionIds = userInstitutions.map(ui => ui.institutionId)
-
-      if (!institutionIds.includes(vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-    }
+    // ADMIN can access any VK (no institution restrictions anymore)
 
     // Check if member exists
     const member = await prisma.commissionMember.findUnique({
@@ -117,18 +106,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'VK not found' }, { status: 404 })
     }
 
-    // Check permissions for ADMIN
-    if (session.user.role === 'ADMIN') {
-      const userInstitutions = await prisma.userInstitution.findMany({
-        where: { userId: session.user.id },
-        select: { institutionId: true }
-      })
-      const institutionIds = userInstitutions.map(ui => ui.institutionId)
-
-      if (!institutionIds.includes(vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-    }
+    // ADMIN can access any VK (no institution restrictions anymore)
 
     // Check if member exists
     const member = await prisma.commissionMember.findUnique({

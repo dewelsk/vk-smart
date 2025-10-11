@@ -37,7 +37,22 @@ export async function GET(
           select: {
             id: true,
             name: true,
-            type: true,
+            testTypeId: true,
+            testTypeConditionId: true,
+            testType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
+            testTypeCondition: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
             questions: true,
             recommendedQuestionCount: true,
             recommendedDuration: true,
@@ -61,7 +76,22 @@ export async function GET(
         test: {
           id: vkTest.test.id,
           name: vkTest.test.name,
-          type: vkTest.test.type,
+          testTypeId: vkTest.test.testTypeId,
+          testType: vkTest.test.testType
+            ? {
+                id: vkTest.test.testType.id,
+                name: vkTest.test.testType.name,
+                description: vkTest.test.testType.description,
+              }
+            : null,
+          testTypeConditionId: vkTest.test.testTypeConditionId,
+          testTypeCondition: vkTest.test.testTypeCondition
+            ? {
+                id: vkTest.test.testTypeCondition.id,
+                name: vkTest.test.testTypeCondition.name,
+                description: vkTest.test.testTypeCondition.description,
+              }
+            : null,
           totalQuestions
         },
         questionCount,
@@ -117,12 +147,14 @@ export async function POST(
       )
     }
 
-    if (vk.status !== 'PRIPRAVA') {
-      return NextResponse.json(
-        { error: 'Testy možno pridávať len ak VK je v stave PRIPRAVA' },
-        { status: 400 }
-      )
-    }
+    // MVP: Allow adding tests in any VK status
+    // TODO: In production, restrict to PRIPRAVA only
+    // if (vk.status !== 'PRIPRAVA') {
+    //   return NextResponse.json(
+    //     { error: 'Testy možno pridávať len ak VK je v stave PRIPRAVA' },
+    //     { status: 400 }
+    //   )
+    // }
 
     // Check test exists and is approved
     const test = await prisma.test.findUnique({
@@ -130,7 +162,22 @@ export async function POST(
       select: {
         id: true,
         name: true,
-        type: true,
+        testTypeId: true,
+        testTypeConditionId: true,
+        testType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
+        testTypeCondition: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
         approved: true,
         questions: true,
         recommendedQuestionCount: true,
@@ -162,20 +209,45 @@ export async function POST(
 
     const nextLevel = existingTests.length > 0 ? existingTests[0].level + 1 : 1
 
-    // Create VKTest with auto-calculated level
-    // Configuration is read from Test model, not stored in VKTest
+    // Calculate configuration from test before creating VKTest
+    const questions = test.questions as any[]
+    const totalQuestions = questions.length
+    const questionCount = test.recommendedQuestionCount || totalQuestions
+    const durationMinutes = test.recommendedDuration || 30
+    const scorePerQuestion = 1
+    const minScore = test.recommendedScore || (questionCount * scorePerQuestion * 0.6)
+
+    // Create VKTest with auto-calculated level and configuration
     const vkTest = await prisma.vKTest.create({
       data: {
         vkId,
         testId,
-        level: nextLevel
+        level: nextLevel,
+        questionCount,
+        durationMinutes,
+        minScore: Math.round(minScore)
       },
       include: {
         test: {
           select: {
             id: true,
             name: true,
-            type: true,
+            testTypeId: true,
+            testTypeConditionId: true,
+            testType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
+            testTypeCondition: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
             questions: true,
             recommendedQuestionCount: true,
             recommendedDuration: true,
@@ -185,14 +257,6 @@ export async function POST(
       }
     })
 
-    // Calculate configuration from test
-    const questions = vkTest.test.questions as any[]
-    const totalQuestions = questions.length
-    const questionCount = vkTest.test.recommendedQuestionCount || totalQuestions
-    const durationMinutes = vkTest.test.recommendedDuration || 30
-    const scorePerQuestion = 1
-    const minScore = vkTest.test.recommendedScore || (questionCount * scorePerQuestion * 0.6)
-
     return NextResponse.json({
       success: true,
       vkTest: {
@@ -201,13 +265,28 @@ export async function POST(
         test: {
           id: vkTest.test.id,
           name: vkTest.test.name,
-          type: vkTest.test.type,
-          totalQuestions
+          testTypeId: vkTest.test.testTypeId,
+          testType: vkTest.test.testType
+            ? {
+                id: vkTest.test.testType.id,
+                name: vkTest.test.testType.name,
+                description: vkTest.test.testType.description,
+              }
+            : null,
+          testTypeConditionId: vkTest.test.testTypeConditionId,
+          testTypeCondition: vkTest.test.testTypeCondition
+            ? {
+                id: vkTest.test.testTypeCondition.id,
+                name: vkTest.test.testTypeCondition.name,
+                description: vkTest.test.testTypeCondition.description,
+              }
+            : null,
+          totalQuestions: totalQuestions
         },
-        questionCount,
-        durationMinutes,
-        scorePerQuestion,
-        minScore,
+        questionCount: vkTest.questionCount,
+        durationMinutes: vkTest.durationMinutes,
+        scorePerQuestion: 1,
+        minScore: vkTest.minScore,
         questionSelectionMode: 'RANDOM'
       }
     })

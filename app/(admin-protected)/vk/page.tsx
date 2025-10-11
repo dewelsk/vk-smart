@@ -109,11 +109,6 @@ export default function VKPage() {
       ),
     },
     {
-      id: 'institution',
-      header: 'Rezort',
-      cell: ({ row }) => row.original.institution.code,
-    },
-    {
       id: 'gestor',
       header: 'Gestor',
       cell: ({ row }) =>
@@ -130,13 +125,19 @@ export default function VKPage() {
       header: 'Miesta',
     },
     {
-      accessorKey: 'date',
-      header: 'Dátum',
-      cell: ({ row }) => new Date(row.original.date).toLocaleDateString('sk-SK'),
+      accessorKey: 'startDateTime',
+      header: 'Dátum a čas začiatku',
+      cell: ({ row }) => new Date(row.original.startDateTime).toLocaleString('sk-SK', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
     },
     {
       id: 'validation',
-      header: 'Validácia',
+      header: 'Kontrola',
       cell: ({ row }) => {
         const v = row.original.validation
         const colors = {
@@ -144,10 +145,27 @@ export default function VKPage() {
           warning: 'bg-yellow-50 text-yellow-700 border-yellow-200',
           error: 'bg-red-50 text-red-700 border-red-200',
         }
+
+        // Build tooltip with errors and warnings
+        const tooltipLines: string[] = []
+        if (v.errors && v.errors.length > 0) {
+          tooltipLines.push('Chyby:')
+          v.errors.forEach(e => tooltipLines.push(`• ${e}`))
+        }
+        if (v.warnings && v.warnings.length > 0) {
+          if (tooltipLines.length > 0) tooltipLines.push('')
+          tooltipLines.push('Varovania:')
+          v.warnings.forEach(w => tooltipLines.push(`• ${w}`))
+        }
+        if (tooltipLines.length === 0) {
+          tooltipLines.push(v.label)
+        }
+        const tooltip = tooltipLines.join('\n')
+
         return (
           <span
-            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${colors[v.status]}`}
-            title={v.label}
+            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${colors[v.status]} cursor-help`}
+            title={tooltip}
           >
             {v.status === 'ready' && <CheckIcon className="h-3 w-3" />}
             {v.status === 'warning' && <ExclamationTriangleIcon className="h-3 w-3" />}

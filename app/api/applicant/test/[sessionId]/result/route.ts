@@ -30,7 +30,24 @@ export async function GET(
     const session = await prisma.testSession.findUnique({
       where: { id: sessionId },
       include: {
-        test: true,
+        test: {
+          include: {
+            testType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
+            testTypeCondition: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            }
+          }
+        },
         vkTest: true
       }
     })
@@ -68,7 +85,24 @@ export async function GET(
         level: session.vkTest.level + 1
       },
       include: {
-        test: true
+        test: {
+          include: {
+            testType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
+            testTypeCondition: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            }
+          }
+        }
       }
     })
 
@@ -89,7 +123,22 @@ export async function GET(
           vkTestId: nextVkTest.id,
           level: nextVkTest.level,
           name: nextVkTest.test.name,
-          type: nextVkTest.test.type
+          testTypeId: nextVkTest.test.testTypeId,
+          testType: nextVkTest.test.testType
+            ? {
+                id: nextVkTest.test.testType.id,
+                name: nextVkTest.test.testType.name,
+                description: nextVkTest.test.testType.description,
+              }
+            : null,
+          testTypeConditionId: nextVkTest.test.testTypeConditionId,
+          testTypeCondition: nextVkTest.test.testTypeCondition
+            ? {
+                id: nextVkTest.test.testTypeCondition.id,
+                name: nextVkTest.test.testTypeCondition.name,
+                description: nextVkTest.test.testTypeCondition.description,
+              }
+            : null
         }
       }
     }
@@ -124,7 +173,22 @@ export async function GET(
       test: {
         level: session.vkTest.level,
         name: session.test.name,
-        type: session.test.type
+        testTypeId: session.test.testTypeId,
+        testType: session.test.testType
+          ? {
+              id: session.test.testType.id,
+              name: session.test.testType.name,
+              description: session.test.testType.description,
+            }
+          : null,
+        testTypeConditionId: session.test.testTypeConditionId,
+        testTypeCondition: session.test.testTypeCondition
+          ? {
+              id: session.test.testTypeCondition.id,
+              name: session.test.testTypeCondition.name,
+              description: session.test.testTypeCondition.description,
+            }
+          : null
       },
       detailedAnswers,
       nextTest,

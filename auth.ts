@@ -13,9 +13,16 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 })
 
+const candidateLoginSchema = z.object({
+  cisIdentifier: z.string().min(1, 'CIS ID is required'),
+  pin: z.string().min(1, 'PIN is required'),
+})
+
 export const authConfig: NextAuthConfig = {
   providers: [
+    // Admin/Gestor/Komisia Login
     Credentials({
+      id: 'credentials',
       name: 'credentials',
       credentials: {
         login: { label: 'Email/Username', type: 'text' },
@@ -37,16 +44,7 @@ export const authConfig: NextAuthConfig = {
               active: true,
             },
             include: {
-              institutions: {
-                include: {
-                  institution: true,
-                },
-              },
-              userRoles: {
-                include: {
-                  institution: true,
-                },
-              },
+              userRoles: true,
             },
           })
 
@@ -74,19 +72,75 @@ export const authConfig: NextAuthConfig = {
             name: user.name,
             surname: user.surname,
             role: user.role,
-            institutions: user.institutions.map((ui) => ({
-              id: ui.institution.id,
-              code: ui.institution.code,
-              name: ui.institution.name,
-            })),
             roles: user.userRoles.map((ur) => ({
               role: ur.role,
-              institutionId: ur.institutionId,
-              institutionName: ur.institution?.name || null,
             })),
+            type: 'user',
           }
         } catch (error) {
           console.error('Authorization error:', error)
+          return null
+        }
+      },
+    }),
+    // Candidate Login
+    Credentials({
+      id: 'candidate-credentials',
+      name: 'Candidate Login',
+      credentials: {
+        cisIdentifier: { label: 'CIS ID', type: 'text' },
+        pin: { label: 'PIN', type: 'password' },
+      },
+      async authorize(credentials) {
+        try {
+          // Validate credentials
+          const { cisIdentifier, pin } = candidateLoginSchema.parse(credentials)
+
+          // Find candidate by CIS
+          const candidate = await prisma.candidate.findUnique({
+            where: {
+              cisIdentifier,
+              active: true,
+              deleted: false,
+            },
+            include: {
+              vk: {
+                select: {
+                  id: true,
+                  identifier: true,
+                },
+              },
+            },
+          })
+
+          if (!candidate || !candidate.password) {
+            return null
+          }
+
+          // Verify PIN
+          const isValid = await bcrypt.compare(pin, candidate.password)
+          if (!isValid) {
+            return null
+          }
+
+          // Update last login
+          await prisma.candidate.update({
+            where: { id: candidate.id },
+            data: { lastLoginAt: new Date() },
+          })
+
+          // Return candidate data for session
+          return {
+            id: candidate.id,
+            candidateId: candidate.id,
+            cisIdentifier: candidate.cisIdentifier,
+            name: candidate.name,
+            surname: candidate.surname,
+            vkId: candidate.vkId,
+            type: 'candidate',
+          }
+        } catch (error) {
+          console.error('Candidate authorization error:', error)
           return null
         }
       },
@@ -104,29 +158,52 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, user }) {
       // Initial sign in
       if (user) {
-        token.id = user.id
-        token.username = user.username
-        token.role = user.role
-        token.institutions = user.institutions
-        token.roles = user.roles
+        if (user.type === 'candidate') {
+          // Candidate session
+          token.id = user.id
+          token.candidateId = user.candidateId
+          token.vkId = user.vkId
+          token.type = 'candidate'
+          token.name = user.name
+          token.surname = user.surname
+        } else {
+          // User (Admin/Gestor/Komisia) session
+          token.id = user.id
+          token.username = user.username
+          token.role = user.role
+          token.roles = user.roles
+          token.type = 'user'
+        }
       }
       return token
     },
     async session({ session, token }) {
       if (token) {
-        session.user.id = token.id as string
-        session.user.username = token.username as string
-        session.user.role = token.role as UserRole
-        session.user.institutions = token.institutions as Array<{
-          id: string
-          code: string
-          name: string
-        }>
-        session.user.roles = token.roles as Array<{
-          role: UserRole
-          institutionId: string | null
-          institutionName: string | null
-        }>
+        if (token.type === 'candidate') {
+          // Candidate session
+          session.user.candidateId = token.candidateId as string
+          session.user.vkId = token.vkId as string
+          session.user.type = 'candidate'
+          session.user.name = token.name as string
+          session.user.surname = token.surname as string
+        } else {
+          // User session
+          session.user.id = token.id as string
+          session.user.username = token.username as string
+          session.user.role = token.role as UserRole
+          session.user.roles = token.roles as Array<{
+            role: UserRole
+          }>
+          session.user.type = 'user'
+        }
+
+        // Temporary role switching (for both types)
+        session.user.originalUserId = token.originalUserId as string | undefined
+        session.user.originalRole = token.originalRole as UserRole | undefined
+        session.user.originalUsername = token.originalUsername as string | undefined
+        session.user.switchedToUserId = token.switchedToUserId as string | undefined
+        session.user.switchedToCandidateId = token.switchedToCandidateId as string | undefined
+        session.user.switchedToName = token.switchedToName as string | undefined
       }
       return session
     },

@@ -6,6 +6,7 @@ test.describe('Test Detail Page @admin @test-detail', () => {
   let testId: string
   let testCategoryId: string
   let testTypeId: string
+  let testTypeConditionId: string | null
 
   test.beforeAll(async () => {
     // Create test data in database
@@ -19,34 +20,49 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       throw new Error('No superadmin found in database')
     }
 
-    // Get or create test type
-    const testType = await prisma.testType.findFirst()
-    if (!testType) {
-      throw new Error('No test type found in database')
-    }
-    testTypeId = testType.id
-
-    // Get or create test category
-    const testCategory = await prisma.testCategory.findFirst({
-      where: { typeId: testTypeId }
+    // Create dedicated test type with a condition for this suite
+    const testType = await prisma.testType.create({
+      data: {
+        name: 'E2E Test Type ' + Date.now(),
+        description: 'Test type used in E2E test detail spec',
+        conditions: {
+          create: [
+            {
+              name: 'Podmienka A',
+              description: 'E2E podmienka pre test detail'
+            }
+          ]
+        }
+      },
+      include: {
+        conditions: true
+      }
     })
-    if (!testCategory) {
-      throw new Error('No test category found in database')
-    }
+    testTypeId = testType.id
+    testTypeConditionId = testType.conditions[0]?.id ?? null
+
+    // Create test category linked to the test type
+    const testCategory = await prisma.testCategory.create({
+      data: {
+        name: 'E2E Test Category ' + Date.now(),
+        typeId: testTypeId
+      }
+    })
     testCategoryId = testCategory.id
 
     // Create a test for E2E testing
     const test = await prisma.test.create({
       data: {
         name: 'E2E Test Detail ' + Date.now(),
-        type: 'ODBORNY',
+        testTypeId,
+        testTypeConditionId,
         categoryId: testCategoryId,
         description: 'E2E test description',
         difficulty: 5,
         recommendedDuration: 60,
         recommendedQuestionCount: 20,
         recommendedScore: 80,
-        allowedQuestionTypes: ['SINGLE_CHOICE'],
+        allowedQuestionTypes: ['SINGLE_CHOICE', 'TRUE_FALSE'],
         approved: false,
         authorId: superadmin.id,
         questions: [
@@ -73,6 +89,12 @@ test.describe('Test Detail Page @admin @test-detail', () => {
     if (testId) {
       await prisma.test.delete({ where: { id: testId } }).catch(() => {})
     }
+    if (testCategoryId) {
+      await prisma.testCategory.delete({ where: { id: testCategoryId } }).catch(() => {})
+    }
+    if (testTypeId) {
+      await prisma.testType.delete({ where: { id: testTypeId } }).catch(() => {})
+    }
     await prisma.$disconnect()
   })
 
@@ -94,7 +116,7 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       // Overview tab should be active by default
       await expect(page.getByTestId('test-name-input')).toBeVisible()
       await expect(page.getByTestId('test-description-input')).toBeVisible()
-      await expect(page.getByTestId('test-difficulty-slider')).toBeVisible()
+      await expect(page.getByTestId('test-type-select')).toBeVisible()
       await expect(page.getByTestId('save-button')).toBeVisible()
     })
 
@@ -116,27 +138,6 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       await page.getByTestId('overview-tab').click()
       await page.waitForTimeout(500)
       await expect(page.getByTestId('test-name-input')).toBeVisible()
-    })
-
-    test('should display allowed question types checkboxes', async ({ page }) => {
-      await page.goto(`/tests/${testId}`)
-
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-
-      // Check all 4 question type checkboxes exist
-      await expect(page.getByTestId('question-type-single_choice')).toBeVisible()
-      await expect(page.getByTestId('question-type-multiple_choice')).toBeVisible()
-      await expect(page.getByTestId('question-type-true_false')).toBeVisible()
-      await expect(page.getByTestId('question-type-open_ended')).toBeVisible()
-    })
-
-    test('should have SINGLE_CHOICE checked by default', async ({ page }) => {
-      await page.goto(`/tests/${testId}`)
-
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-
-      const singleChoice = page.getByTestId('question-type-single_choice')
-      await expect(singleChoice).toBeChecked()
     })
 
     test('should update test basic info', async ({ page }) => {
@@ -168,110 +169,13 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       await expect(descriptionInput).toHaveValue(newDescription)
     })
 
-    test('should select and deselect question types', async ({ page }) => {
+    test('should update recommended duration', async ({ page }) => {
       await page.goto(`/tests/${testId}`)
 
       await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-
-      const multipleChoice = page.getByTestId('question-type-multiple_choice')
-      const trueFalse = page.getByTestId('question-type-true_false')
-
-      // Check MULTIPLE_CHOICE
-      if (!(await multipleChoice.isChecked())) {
-        await multipleChoice.click()
-        await page.waitForTimeout(100)
-      }
-      await expect(multipleChoice).toBeChecked()
-
-      // Check TRUE_FALSE
-      if (!(await trueFalse.isChecked())) {
-        await trueFalse.click()
-        await page.waitForTimeout(100)
-      }
-      await expect(trueFalse).toBeChecked()
-
-      // Save
-      await page.getByTestId('save-button').click()
-      await expect(page.locator('text=Test bol úspešne aktualizovaný')).toBeVisible({ timeout: 5000 })
-
-      // Reload and verify
-      await page.reload()
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-      await expect(multipleChoice).toBeChecked()
-      await expect(trueFalse).toBeChecked()
-
-      // Now uncheck TRUE_FALSE
-      await trueFalse.click()
-      await page.waitForTimeout(100)
-      await expect(trueFalse).not.toBeChecked()
-
-      // Save again
-      await page.getByTestId('save-button').click()
-      await expect(page.locator('text=Test bol úspešne aktualizovaný')).toBeVisible({ timeout: 5000 })
-
-      // Verify TRUE_FALSE is unchecked
-      await page.reload()
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-      await expect(trueFalse).not.toBeChecked()
-      await expect(multipleChoice).toBeChecked()
-    })
-
-    test('should prevent unchecking the last question type', async ({ page }) => {
-      await page.goto(`/tests/${testId}`)
-
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-
-      // Make sure only SINGLE_CHOICE is checked
-      const singleChoice = page.getByTestId('question-type-single_choice')
-      const multipleChoice = page.getByTestId('question-type-multiple_choice')
-      const trueFalse = page.getByTestId('question-type-true_false')
-      const openEnded = page.getByTestId('question-type-open_ended')
-
-      // Uncheck all except SINGLE_CHOICE
-      if (await multipleChoice.isChecked()) {
-        await multipleChoice.click()
-        await page.waitForTimeout(100)
-      }
-      if (await trueFalse.isChecked()) {
-        await trueFalse.click()
-        await page.waitForTimeout(100)
-      }
-      if (await openEnded.isChecked()) {
-        await openEnded.click()
-        await page.waitForTimeout(100)
-      }
-
-      // Save
-      await page.getByTestId('save-button').click()
-      await expect(page.locator('text=Test bol úspešne aktualizovaný')).toBeVisible({ timeout: 5000 })
-
-      // Reload
-      await page.reload()
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-
-      // Verify SINGLE_CHOICE is the only one checked
-      await expect(singleChoice).toBeChecked()
-      await expect(multipleChoice).not.toBeChecked()
-      await expect(trueFalse).not.toBeChecked()
-      await expect(openEnded).not.toBeChecked()
-
-      // Try to uncheck SINGLE_CHOICE (should be disabled)
-      const isDisabled = await singleChoice.isDisabled()
-      expect(isDisabled).toBe(true)
-    })
-
-    test('should update difficulty and recommended duration', async ({ page }) => {
-      await page.goto(`/tests/${testId}`)
-
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-
-      // Update difficulty via slider
-      const difficultySlider = page.getByTestId('test-difficulty-slider')
-      await difficultySlider.fill('7')
 
       // Update recommended duration
-      const durationInput = page.getByTestId('test-duration-input')
-      await durationInput.fill('90')
+      await page.getByTestId('test-duration-input').fill('90')
 
       // Save
       await page.getByTestId('save-button').click()
@@ -280,8 +184,7 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       // Verify
       await page.reload()
       await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-      await expect(page.getByTestId('test-difficulty-value')).toHaveText('7')
-      await expect(durationInput).toHaveValue('90')
+      await expect(page.getByTestId('test-duration-input')).toHaveValue('90')
     })
 
     test('should validate required fields', async ({ page }) => {
@@ -300,36 +203,6 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       await expect(page.locator('text=Názov testu je povinný').or(page.locator('text=required'))).toBeVisible({ timeout: 3000 })
     })
 
-    test('should update test with all four question types', async ({ page }) => {
-      await page.goto(`/tests/${testId}`)
-
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-
-      // Check all question types
-      const singleChoice = page.getByTestId('question-type-single_choice')
-      const multipleChoice = page.getByTestId('question-type-multiple_choice')
-      const trueFalse = page.getByTestId('question-type-true_false')
-      const openEnded = page.getByTestId('question-type-open_ended')
-
-      if (!(await singleChoice.isChecked())) await singleChoice.click()
-      if (!(await multipleChoice.isChecked())) await multipleChoice.click()
-      if (!(await trueFalse.isChecked())) await trueFalse.click()
-      if (!(await openEnded.isChecked())) await openEnded.click()
-
-      await page.waitForTimeout(200)
-
-      // Save
-      await page.getByTestId('save-button').click()
-      await expect(page.locator('text=Test bol úspešne aktualizovaný')).toBeVisible({ timeout: 5000 })
-
-      // Verify all are checked
-      await page.reload()
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-      await expect(singleChoice).toBeChecked()
-      await expect(multipleChoice).toBeChecked()
-      await expect(trueFalse).toBeChecked()
-      await expect(openEnded).toBeChecked()
-    })
   })
 
   test.describe('Questions Display', () => {
@@ -370,10 +243,6 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       // Question text
       await expect(page.getByTestId('question-text-0')).toBeVisible()
       await expect(page.getByTestId('question-text-0')).toHaveText('Test question?')
-
-      // Question type badge
-      await expect(page.getByTestId('question-type-0')).toBeVisible()
-      await expect(page.getByTestId('question-type-0')).toContainText('Jednovýberová')
 
       // Question points badge
       await expect(page.getByTestId('question-points-0')).toBeVisible()
@@ -757,19 +626,6 @@ test.describe('Test Detail Page @admin @test-detail', () => {
 
       await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
 
-      // First, update test to allow TRUE_FALSE
-      const trueFalseCheckbox = page.getByTestId('question-type-true_false')
-      if (!(await trueFalseCheckbox.isChecked())) {
-        await trueFalseCheckbox.click()
-        await page.waitForTimeout(100)
-      }
-      await page.getByTestId('save-button').click()
-      await page.waitForTimeout(3000) // Wait for save
-
-      // Reload to get updated test data
-      await page.reload()
-      await expect(page.getByTestId('test-detail-page')).toBeVisible({ timeout: 10000 })
-
       // Switch to Questions tab
       await page.getByTestId('questions-tab').click()
       await page.waitForTimeout(500)
@@ -798,8 +654,12 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       // Wait for success toast
       await expect(page.locator('text=Otázka bola úspešne aktualizovaná')).toBeVisible({ timeout: 5000 })
 
-      // Verify question type badge changed
-      await expect(page.getByTestId('question-type-0')).toContainText('Pravda/Nepravda')
+      // Re-open modal to verify type is stored
+      await page.getByTestId('edit-question-0-button').click()
+      await expect(page.getByTestId('edit-question-modal')).toBeVisible()
+      await expect(page.getByTestId('edit-question-type')).toHaveValue('TRUE_FALSE')
+      await page.getByTestId('cancel-edit-button').click()
+      await expect(page.getByTestId('edit-question-modal')).not.toBeVisible()
     })
 
     test('should change question type from TRUE_FALSE back to SINGLE_CHOICE', async ({ page }) => {
@@ -843,8 +703,12 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       // Wait for success toast
       await expect(page.locator('text=Otázka bola úspešne aktualizovaná')).toBeVisible({ timeout: 5000 })
 
-      // Verify question type badge changed back
-      await expect(page.getByTestId('question-type-0')).toContainText('Jednovýberová')
+      // Re-open modal to verify type change
+      await page.getByTestId('edit-question-0-button').click()
+      await expect(page.getByTestId('edit-question-modal')).toBeVisible()
+      await expect(page.getByTestId('edit-question-type')).toHaveValue('SINGLE_CHOICE')
+      await page.getByTestId('cancel-edit-button').click()
+      await expect(page.getByTestId('edit-question-modal')).not.toBeVisible()
 
       // Verify 3 answers are shown
       await expect(page.getByTestId('answer-0-0')).toBeVisible()
@@ -866,7 +730,8 @@ test.describe('Test Detail Page @admin @test-detail', () => {
         const singleTypeTest = await prisma.test.create({
           data: {
             name: 'E2E Single Type Test ' + Date.now(),
-            type: 'ODBORNY',
+            testTypeId,
+            testTypeConditionId,
             categoryId: testCategoryId,
             description: 'Test with single allowed question type',
             difficulty: 5,
@@ -955,7 +820,8 @@ test.describe('Test Detail Page @admin @test-detail', () => {
         const multiTypeTest = await prisma.test.create({
           data: {
             name: 'E2E Multi Type Test ' + Date.now(),
-            type: 'ODBORNY',
+            testTypeId,
+            testTypeConditionId,
             categoryId: testCategoryId,
             description: 'Test with multiple allowed question types',
             difficulty: 5,
@@ -1057,7 +923,8 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       const cloneableTest = await prisma.test.create({
         data: {
           name: 'Test to Clone ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
+          testTypeConditionId,
           categoryId: testCategory.id,
           description: 'Test for cloning',
           difficulty: 5,
@@ -1074,7 +941,8 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       const deletableTest = await prisma.test.create({
         data: {
           name: 'Test to Delete ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
+          testTypeConditionId,
           categoryId: testCategory.id,
           description: 'Test for deletion',
           difficulty: 5,
@@ -1091,7 +959,8 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       const usedTest = await prisma.test.create({
         data: {
           name: 'Test Used in VK ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
+          testTypeConditionId,
           categoryId: testCategory.id,
           description: 'Test used in active VK',
           difficulty: 5,
@@ -1224,37 +1093,32 @@ test.describe('Test Detail Page @admin @test-detail', () => {
       expect(title).toContain('aktívnom VK')
     })
 
-    test('should show warning and disable editing for test used in VK', async ({ page }) => {
+    test('should allow editing for test used in VK', async ({ page }) => {
       await page.goto(`/tests/${usedInVKTestId}`)
       await expect(page.getByTestId('test-detail-page')).toBeVisible()
-
-      // Warning should be visible
-      await expect(page.getByTestId('usage-warning')).toBeVisible()
-      await expect(page.locator('text=🔒 Tento test bol použitý vo výberovom konaní')).toBeVisible()
 
       // Navigate to overview tab
       await page.getByTestId('overview-tab').click()
       await page.waitForTimeout(300)
 
-      // Edit inputs should be disabled
+      // Edit inputs should be ENABLED (tests can now be edited even if used in VK)
       const nameInput = page.getByTestId('test-name-input')
-      await expect(nameInput).toBeDisabled()
+      await expect(nameInput).toBeEnabled()
 
       const descriptionInput = page.getByTestId('test-description-input')
-      await expect(descriptionInput).toBeDisabled()
+      await expect(descriptionInput).toBeEnabled()
 
-      const categorySelect = page.getByTestId('test-category-select')
-      await expect(categorySelect).toBeDisabled()
+      await expect(page.getByTestId('test-type-select')).toBeEnabled()
 
-      // Save button should not be visible (canEdit is false)
-      await expect(page.getByTestId('save-button')).not.toBeVisible()
+      // Save button SHOULD be visible (canEdit is true)
+      await expect(page.getByTestId('save-button')).toBeVisible()
 
       // Navigate to questions tab
       await page.getByTestId('questions-tab').click()
       await page.waitForTimeout(300)
 
-      // Edit question buttons should not be visible
-      await expect(page.getByTestId('edit-question-0-button')).not.toBeVisible()
+      // Edit question buttons SHOULD be visible
+      await expect(page.getByTestId('edit-question-0-button')).toBeVisible()
     })
 
     test('should allow cloning test that is used in VK', async ({ page }) => {
@@ -1280,9 +1144,6 @@ test.describe('Test Detail Page @admin @test-detail', () => {
 
       const nameInput = page.getByTestId('test-name-input')
       await expect(nameInput).toBeEnabled()
-
-      // Warning should not be visible
-      await expect(page.getByTestId('usage-warning')).not.toBeVisible()
     })
   })
 })

@@ -35,7 +35,8 @@ export async function POST(
     const clonedTest = await prisma.test.create({
       data: {
         name: `${originalTest.name} (kópia)`,
-        type: originalTest.type, // Legacy enum (for backward compatibility)
+        testTypeId: originalTest.testTypeId,
+        testTypeConditionId: originalTest.testTypeConditionId,
         description: originalTest.description,
         questions: originalTest.questions,
         recommendedQuestionCount: originalTest.recommendedQuestionCount,
@@ -55,6 +56,20 @@ export async function POST(
         authorId: session.user.id,
       },
       include: {
+        testType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
+        testTypeCondition: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
         category: {
           select: {
             id: true,

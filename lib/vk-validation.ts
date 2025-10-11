@@ -83,7 +83,28 @@ export function validateVK(vk: VK): ValidationIssue[] {
     })
   }
 
-  // C) KOMISIA
+  // C) ÚSTNA ČASŤ
+  if (!vk.evaluationConfig || !vk.evaluationConfig.evaluatedTraits || vk.evaluationConfig.evaluatedTraits.length === 0) {
+    issues.push({
+      type: 'error',
+      code: 'NO_ORAL_CONFIG',
+      message: 'Nie sú vybrané kategórie pre ústnu časť',
+      action: 'Vybrať kategórie',
+      actionLink: '/vk/' + vk.id + '?tab=oral',
+      tab: 'oral'
+    })
+  } else if (vk.evaluationConfig.evaluatedTraits.length < 3) {
+    issues.push({
+      type: 'error',
+      code: 'INSUFFICIENT_ORAL_CATEGORIES',
+      message: `Vybraných len ${vk.evaluationConfig.evaluatedTraits.length} kategórií (minimum 3)`,
+      action: 'Doplniť kategórie',
+      actionLink: '/vk/' + vk.id + '?tab=oral',
+      tab: 'oral'
+    })
+  }
+
+  // D) KOMISIA
   if (!vk.commission) {
     issues.push({
       type: 'error',
@@ -96,6 +117,7 @@ export function validateVK(vk: VK): ValidationIssue[] {
   } else {
     const memberCount = vk.commission.members.length
 
+    // If no members, only show "no members" error
     if (memberCount === 0) {
       issues.push({
         type: 'error',
@@ -105,20 +127,8 @@ export function validateVK(vk: VK): ValidationIssue[] {
         actionLink: '/vk/' + vk.id + '?tab=commission',
         tab: 'commission'
       })
-    }
-
-    if (memberCount > 0 && memberCount % 2 === 0) {
-      issues.push({
-        type: 'error',
-        code: 'COMMISSION_EVEN_COUNT',
-        message: `Komisia má párny počet členov (${memberCount})`,
-        action: 'Pridať alebo odstrániť člena',
-        actionLink: '/vk/' + vk.id + '?tab=commission',
-        tab: 'commission'
-      })
-    }
-
-    if (memberCount > 0 && memberCount < 3) {
+    } else if (memberCount < 3) {
+      // If 1-2 members, only show "min 3 members" error (skip even/chairman checks)
       issues.push({
         type: 'error',
         code: 'COMMISSION_MIN_MEMBERS',
@@ -127,50 +137,65 @@ export function validateVK(vk: VK): ValidationIssue[] {
         actionLink: '/vk/' + vk.id + '?tab=commission',
         tab: 'commission'
       })
-    }
+    } else {
+      // If 3+ members, check even count
+      if (memberCount % 2 === 0) {
+        issues.push({
+          type: 'error',
+          code: 'COMMISSION_EVEN_COUNT',
+          message: `Komisia má párny počet členov (${memberCount})`,
+          action: 'Pridať alebo odstrániť člena',
+          actionLink: '/vk/' + vk.id + '?tab=commission',
+          tab: 'commission'
+        })
+      }
 
-    if (memberCount > 9) {
-      issues.push({
-        type: 'warning',
-        code: 'COMMISSION_MAX_MEMBERS',
-        message: 'Komisia má viac ako 9 členov (odporúčané maximum)',
-        action: 'Skontrolovať počet',
-        actionLink: '/vk/' + vk.id + '?tab=commission',
-        tab: 'commission'
-      })
-    }
+      // Check for chairman
+      const chairmen = vk.commission.members.filter(m => m.isChairman)
+      if (chairmen.length === 0) {
+        issues.push({
+          type: 'error',
+          code: 'NO_CHAIRMAN',
+          message: 'Komisia nemá predsedu',
+          action: 'Nastaviť predsedu',
+          actionLink: '/vk/' + vk.id + '?tab=commission',
+          tab: 'commission'
+        })
+      } else if (chairmen.length > 1) {
+        issues.push({
+          type: 'error',
+          code: 'MULTIPLE_CHAIRMEN',
+          message: 'Komisia má viac ako jedného predsedu',
+          action: 'Odstrániť duplicitných predsedov',
+          actionLink: '/vk/' + vk.id + '?tab=commission',
+          tab: 'commission'
+        })
+      }
 
-    const chairmen = vk.commission.members.filter(m => m.isChairman)
-    if (memberCount > 0 && chairmen.length === 0) {
-      issues.push({
-        type: 'error',
-        code: 'NO_CHAIRMAN',
-        message: 'Komisia nemá predsedu',
-        action: 'Nastaviť predsedu',
-        actionLink: '/vk/' + vk.id + '?tab=commission',
-        tab: 'commission'
-      })
-    } else if (chairmen.length > 1) {
-      issues.push({
-        type: 'error',
-        code: 'MULTIPLE_CHAIRMEN',
-        message: 'Komisia má viac ako jedného predsedu',
-        action: 'Odstrániť duplicitných predsedov',
-        actionLink: '/vk/' + vk.id + '?tab=commission',
-        tab: 'commission'
-      })
-    }
+      // Check for max members (warning only)
+      if (memberCount > 9) {
+        issues.push({
+          type: 'warning',
+          code: 'COMMISSION_MAX_MEMBERS',
+          message: 'Komisia má viac ako 9 členov (odporúčané maximum)',
+          action: 'Skontrolovať počet',
+          actionLink: '/vk/' + vk.id + '?tab=commission',
+          tab: 'commission'
+        })
+      }
 
-    const inactiveMembers = vk.commission.members.filter(m => !m.user.active)
-    if (inactiveMembers.length > 0) {
-      issues.push({
-        type: 'warning',
-        code: 'INACTIVE_COMMISSION_MEMBERS',
-        message: `${inactiveMembers.length} členov komisie je neaktívnych`,
-        action: 'Skontrolovať členov',
-        actionLink: '/vk/' + vk.id + '?tab=commission',
-        tab: 'commission'
-      })
+      // Check for inactive members
+      const inactiveMembers = vk.commission.members.filter(m => !m.user.active)
+      if (inactiveMembers.length > 0) {
+        issues.push({
+          type: 'warning',
+          code: 'INACTIVE_COMMISSION_MEMBERS',
+          message: `${inactiveMembers.length} členov komisie je neaktívnych`,
+          action: 'Skontrolovať členov',
+          actionLink: '/vk/' + vk.id + '?tab=commission',
+          tab: 'commission'
+        })
+      }
     }
   }
 
@@ -276,7 +301,13 @@ export function getPreparationChecklist(vk: VK): Array<{
       actionLink: '/vk/' + vk.id + '?tab=tests'
     },
     {
-      label: 'Vytvoriť komisiu (3-9 členov, nepárny počet)',
+      label: 'Vybrať kategórie pre ústnu časť (minimálne 3)',
+      completed: vk.evaluationConfig && vk.evaluationConfig.evaluatedTraits && vk.evaluationConfig.evaluatedTraits.length >= 3,
+      action: 'Vybrať',
+      actionLink: '/vk/' + vk.id + '?tab=oral'
+    },
+    {
+      label: 'Vytvoriť komisiu (minimálne 3 členovia, nepárny počet)',
       completed: !!vk.commission && vk.commission.members.length >= 3 && vk.commission.members.length % 2 === 1,
       action: 'Vytvoriť',
       actionLink: '/vk/' + vk.id + '?tab=commission'

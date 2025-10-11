@@ -30,13 +30,6 @@ export async function GET(
         id: params.id,
       },
       include: {
-        institution: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
         gestor: {
           select: {
             id: true,
@@ -53,23 +46,13 @@ export async function GET(
           },
         },
         candidates: {
-          where: {
-            deleted: false,
-          },
           select: {
             id: true,
             cisIdentifier: true,
             isArchived: true,
+            deleted: true,
             email: true,
             registeredAt: true,
-            user: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-                email: true,
-              },
-            },
           },
         },
         assignedTests: {
@@ -78,9 +61,20 @@ export async function GET(
               select: {
                 id: true,
                 name: true,
-                type: true,
+                testType: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
               },
             },
+          },
+        },
+        evaluationConfig: {
+          select: {
+            id: true,
+            evaluatedTraits: true,
           },
         },
         commission: {
@@ -108,26 +102,16 @@ export async function GET(
       return NextResponse.json({ error: 'VK not found' }, { status: 404 })
     }
 
-    // RBAC: Check if user has access to this VK's institution
-    if (session.user.role !== 'SUPERADMIN') {
-      const userInstitutionIds = session.user.institutions.map((i) => i.id)
-      if (!userInstitutionIds.includes(vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-    }
-
     // Format response
     const formattedVK = {
       id: vk.id,
       identifier: vk.identifier,
-      institutionId: vk.institutionId,
-      institution: vk.institution,
       selectionType: vk.selectionType,
       organizationalUnit: vk.organizationalUnit,
       serviceField: vk.serviceField,
       position: vk.position,
       serviceType: vk.serviceType,
-      date: vk.date,
+      startDateTime: vk.startDateTime,
       numberOfPositions: vk.numberOfPositions,
       status: vk.status,
       gestorId: vk.gestorId,
@@ -185,12 +169,13 @@ export async function PUT(
 
     const body = await request.json()
     const {
+      identifier,
       selectionType,
       organizationalUnit,
       serviceField,
       position,
       serviceType,
-      date,
+      startDateTime,
       numberOfPositions,
       status,
       gestorId,
@@ -205,12 +190,65 @@ export async function PUT(
       return NextResponse.json({ error: 'VK not found' }, { status: 404 })
     }
 
-    // RBAC: Admin can only update VK from their institutions
-    if (session.user.role === 'ADMIN') {
-      const userInstitutionIds = session.user.institutions.map((i) => i.id)
-      if (!userInstitutionIds.includes(existingVK.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Check if VK is in DOKONCENE status - cannot be edited
+    if (existingVK.status === 'DOKONCENE' || existingVK.status === 'ZRUSENE') {
+      return NextResponse.json({
+        error: 'Výberové konanie v stave DOKONČENÉ alebo ZRUŠENÉ nie je možné upravovať'
+      }, { status: 400 })
+    }
+
+    // Validate fields
+    const errors: Record<string, string> = {}
+
+    if (identifier !== undefined && !identifier.trim()) {
+      errors.identifier = 'Identifikátor je povinný'
+    }
+
+    if (selectionType !== undefined && !selectionType.trim()) {
+      errors.selectionType = 'Druh konania je povinný'
+    }
+
+    if (organizationalUnit !== undefined && !organizationalUnit.trim()) {
+      errors.organizationalUnit = 'Organizačný útvar je povinný'
+    }
+
+    if (serviceField !== undefined && !serviceField.trim()) {
+      errors.serviceField = 'Odbor je povinný'
+    }
+
+    if (position !== undefined && !position.trim()) {
+      errors.position = 'Pozícia je povinná'
+    }
+
+    if (serviceType !== undefined && !serviceType.trim()) {
+      errors.serviceType = 'Druh štátnej služby je povinný'
+    }
+
+    if (startDateTime !== undefined && !startDateTime) {
+      errors.startDateTime = 'Dátum a čas začiatku je povinný'
+    }
+
+    if (numberOfPositions !== undefined && numberOfPositions < 1) {
+      errors.numberOfPositions = 'Počet miest musí byť aspoň 1'
+    }
+
+    // Check if identifier is unique (if being changed)
+    if (identifier !== undefined && identifier !== existingVK.identifier) {
+      const existingWithIdentifier = await prisma.vyberoveKonanie.findFirst({
+        where: {
+          identifier,
+          id: { not: params.id },
+          deleted: false,
+        },
+      })
+
+      if (existingWithIdentifier) {
+        errors.identifier = 'Výberové konanie s týmto identifikátorom už existuje'
       }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return NextResponse.json({ errors }, { status: 400 })
     }
 
     // Validate status transition if status is being changed
@@ -239,24 +277,18 @@ export async function PUT(
     const updatedVK = await prisma.vyberoveKonanie.update({
       where: { id: params.id },
       data: {
+        identifier: identifier ?? existingVK.identifier,
         selectionType: selectionType ?? existingVK.selectionType,
         organizationalUnit: organizationalUnit ?? existingVK.organizationalUnit,
         serviceField: serviceField ?? existingVK.serviceField,
         position: position ?? existingVK.position,
         serviceType: serviceType ?? existingVK.serviceType,
-        date: date ? new Date(date) : existingVK.date,
+        startDateTime: startDateTime ? new Date(startDateTime) : existingVK.startDateTime,
         numberOfPositions: numberOfPositions ?? existingVK.numberOfPositions,
         status: status ?? existingVK.status,
         gestorId: gestorId !== undefined ? gestorId : existingVK.gestorId,
       },
       include: {
-        institution: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
         gestor: {
           select: {
             id: true,
@@ -279,7 +311,6 @@ export async function PUT(
         date: updatedVK.date,
         numberOfPositions: updatedVK.numberOfPositions,
         status: updatedVK.status,
-        institution: updatedVK.institution,
         gestor: updatedVK.gestor,
       },
     })

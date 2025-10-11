@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const useExistingServer = !!process.env.PLAYWRIGHT_USE_EXISTING_SERVER
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -21,9 +23,12 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: 'npm run dev:e2e',
-    url: 'http://localhost:5600',
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: useExistingServer
+    ? undefined
+    : {
+        command: 'npm run dev:e2e',
+        url: 'http://localhost:5600',
+        reuseExistingServer: true, // Always reuse existing server in local development
+        timeout: 120 * 1000,
+      },
 })

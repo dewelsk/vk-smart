@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, categoryId, duration, difficulty, totalPoints, questions, allowedQuestionTypes } = body
+    const { name, testTypeId, testTypeConditionId, duration, totalPoints, questions, allowedQuestionTypes } = body
 
     // Validate inputs
     if (!name?.trim()) {
@@ -21,23 +21,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!categoryId) {
+    if (!testTypeId) {
       return NextResponse.json(
-        { error: 'Kategória je povinná' },
+        { error: 'Typ testu je povinný' },
         { status: 400 }
       )
     }
 
-    // Validate allowedQuestionTypes
-    if (!allowedQuestionTypes || !Array.isArray(allowedQuestionTypes) || allowedQuestionTypes.length === 0) {
-      return NextResponse.json(
-        { error: 'Aspoň jeden typ otázky musí byť vybraný' },
-        { status: 400 }
-      )
-    }
+    // Validate allowedQuestionTypes (default to SINGLE_CHOICE if not provided)
+    const finalAllowedQuestionTypes = allowedQuestionTypes && Array.isArray(allowedQuestionTypes) && allowedQuestionTypes.length > 0
+      ? allowedQuestionTypes
+      : ['SINGLE_CHOICE']
 
     const validQuestionTypes = ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'OPEN_ENDED']
-    const invalidTypes = allowedQuestionTypes.filter(type => !validQuestionTypes.includes(type))
+    const invalidTypes = finalAllowedQuestionTypes.filter(type => !validQuestionTypes.includes(type))
     if (invalidTypes.length > 0) {
       return NextResponse.json(
         { error: `Neplatné typy otázok: ${invalidTypes.join(', ')}` },
@@ -86,9 +83,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Validate questionType is in allowedQuestionTypes
-      if (!allowedQuestionTypes.includes(question.questionType)) {
+      if (!finalAllowedQuestionTypes.includes(question.questionType)) {
         return NextResponse.json(
-          { error: `Otázka ${question.order} má nepovolený typ "${question.questionType}". Povolené typy pre tento test: ${allowedQuestionTypes.join(', ')}` },
+          { error: `Otázka ${question.order} má nepovolený typ "${question.questionType}". Povolené typy pre tento test: ${finalAllowedQuestionTypes.join(', ')}` },
           { status: 400 }
         )
       }
@@ -116,41 +113,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine test type from category or use default
-    let testType = 'ODBORNY' // default
-    if (categoryId) {
-      const category = await prisma.testCategory.findUnique({
-        where: { id: categoryId },
-        include: { type: true }
-      })
-
-      // Map TestType name to TestTyp enum
-      if (category?.type) {
-        const typeMapping: Record<string, string> = {
-          'Štátny jazyk': 'STATNY_JAZYK',
-          'Cudzí jazyk': 'CUDZI_JAZYK',
-          'IT zručnosti': 'IT_ZRUCNOSTI',
-          'Odborný test': 'ODBORNY',
-          'Všeobecný prehľad': 'VSEOBECNY',
-          'Schopnosti a vlastnosti': 'SCHOPNOSTI_VLASTNOSTI',
-        }
-        testType = typeMapping[category.type.name] || 'ODBORNY'
-      }
-    }
-
     // Create test in database with questions as JSON
     const test = await prisma.test.create({
       data: {
         name,
-        type: testType as any,
-        categoryId,
+        testTypeId,
+        testTypeConditionId: testTypeConditionId || null,
+        categoryId: null, // No category for imported tests
         recommendedDuration: duration,
         recommendedQuestionCount: questions.length,
-        difficulty: difficulty || 5, // Default to 5 if not provided
+        difficulty: 5, // Default medium difficulty
         approved: false, // Draft by default
         authorId: session.user.id,
         questions: questions, // Store as JSON
-        allowedQuestionTypes: allowedQuestionTypes, // Store allowed question types
+        allowedQuestionTypes: finalAllowedQuestionTypes, // Store allowed question types
       },
     })
 

@@ -110,7 +110,7 @@ export default function AdminLoginPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h1 className="text-center text-3xl font-bold text-gray-900">
-          VK Smart
+          Výberové konanie Smart
         </h1>
         <h2 className="mt-2 text-center text-lg text-gray-600">
           Prihlásenie do systému
@@ -259,9 +259,9 @@ export default function AdminLoginPage() {
           </p>
           <div className="text-xs text-blue-800 space-y-1">
             <p><strong>Superadmin:</strong> superadmin@retry.sk / Hackaton25</p>
-            <p><strong>Admin MV:</strong> admin.mv@retry.sk / Test1234</p>
-            <p><strong>Gestor MV:</strong> gestor.mv@retry.sk / Test1234</p>
-            <p><strong>Komisia MV:</strong> komisia.mv@retry.sk / Test1234</p>
+            {/*<p><strong>Admin MV:</strong> admin.mv@retry.sk / Test1234</p>*/}
+            {/*<p><strong>Gestor MV:</strong> gestor.mv@retry.sk / Test1234</p>*/}
+            {/*<p><strong>Komisia MV:</strong> komisia.mv@retry.sk / Test1234</p>*/}
           </div>
         </div>
 

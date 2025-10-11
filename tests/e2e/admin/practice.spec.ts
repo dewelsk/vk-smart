@@ -4,6 +4,9 @@ import { prisma } from '@/lib/prisma'
 
 test.describe('Practice Tests Flow', () => {
   let practiceTestId: string
+  let testTypeId: string
+  let testTypeConditionId: string | null
+  let testCategoryId: string
 
   test.beforeAll(async () => {
     await prisma.$connect()
@@ -16,18 +19,42 @@ test.describe('Practice Tests Flow', () => {
       throw new Error('No superadmin found')
     }
 
-    // Get test category
-    const category = await prisma.testCategory.findFirst()
-    if (!category) {
-      throw new Error('No test category found')
-    }
+    // Create dedicated test type and category
+    const testType = await prisma.testType.create({
+      data: {
+        name: 'E2E Practice Test Type ' + Date.now(),
+        description: 'Test type for practice flow spec',
+        conditions: {
+          create: [
+            {
+              name: 'Practice podmienka',
+              description: 'Podmienka pre practice e2e test'
+            }
+          ]
+        }
+      },
+      include: {
+        conditions: true
+      }
+    })
+    testTypeId = testType.id
+    testTypeConditionId = testType.conditions[0]?.id ?? null
+
+    const category = await prisma.testCategory.create({
+      data: {
+        name: 'E2E Practice Category ' + Date.now(),
+        typeId: testTypeId
+      }
+    })
+    testCategoryId = category.id
 
     // Create practice test
     const practiceTest = await prisma.test.create({
       data: {
         name: 'E2E Practice Test ' + Date.now(),
-        type: 'ODBORNY',
-        categoryId: category.id,
+        testTypeId,
+        testTypeConditionId,
+        categoryId: testCategoryId,
         description: 'Practice test for E2E testing',
         difficulty: 5,
         recommendedDuration: 30,
@@ -69,6 +96,12 @@ test.describe('Practice Tests Flow', () => {
   test.afterAll(async () => {
     if (practiceTestId) {
       await prisma.test.delete({ where: { id: practiceTestId } }).catch(() => {})
+    }
+    if (testCategoryId) {
+      await prisma.testCategory.delete({ where: { id: testCategoryId } }).catch(() => {})
+    }
+    if (testTypeId) {
+      await prisma.testType.delete({ where: { id: testTypeId } }).catch(() => {})
     }
     await prisma.$disconnect()
   })

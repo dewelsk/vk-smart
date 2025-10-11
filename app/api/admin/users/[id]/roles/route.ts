@@ -21,7 +21,7 @@ export async function POST(
 
     const { id: userId } = params
     const body = await request.json()
-    const { role, institutionId } = body
+    const { role } = body
 
     // Validation
     if (!role) {
@@ -47,69 +47,21 @@ export async function POST(
       )
     }
 
-    // Check if user exists and get their existing roles
+    // Check if user exists
     const user = await prisma.user.findUnique({
       where: { id: userId, deleted: false },
-      include: {
-        userRoles: {
-          select: {
-            institutionId: true,
-          },
-        },
-      },
     })
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Auto-inherit institutionId from user's existing roles
-    // If user has any role with an institutionId, use the first one found
-    // Otherwise, use null (global role)
-    let inheritedInstitutionId: string | null = null
-    if (user.userRoles.length > 0) {
-      const existingRoleWithInstitution = user.userRoles.find(r => r.institutionId !== null)
-      if (existingRoleWithInstitution) {
-        inheritedInstitutionId = existingRoleWithInstitution.institutionId
-      }
-    }
-
-    // Override with provided institutionId if explicitly specified (for backwards compatibility)
-    const finalInstitutionId = institutionId !== undefined ? institutionId : inheritedInstitutionId
-
-    // RBAC: Admin (non-superadmin) can only assign roles within their institutions
-    const isAdminOnly = userRoles.includes(UserRole.ADMIN) && !isSuperadmin
-    if (isAdminOnly && finalInstitutionId) {
-      const userInstitutionIds = session.user.institutions.map(i => i.id)
-      if (!userInstitutionIds.includes(finalInstitutionId)) {
-        return NextResponse.json(
-          { error: 'You can only assign roles in your institutions' },
-          { status: 403 }
-        )
-      }
-    }
-
-    // If institution specified, verify it exists
-    if (finalInstitutionId) {
-      const institution = await prisma.institution.findUnique({
-        where: { id: finalInstitutionId },
-      })
-
-      if (!institution) {
-        return NextResponse.json(
-          { error: 'Institution not found' },
-          { status: 404 }
-        )
-      }
-    }
-
     // Check if role assignment already exists
     const existing = await prisma.userRoleAssignment.findUnique({
       where: {
-        userId_role_institutionId: {
+        userId_role: {
           userId,
           role,
-          institutionId: finalInstitutionId,
         },
       },
     })
@@ -121,16 +73,12 @@ export async function POST(
       )
     }
 
-    // Create role assignment with inherited or specified institutionId
+    // Create role assignment
     const roleAssignment = await prisma.userRoleAssignment.create({
       data: {
         userId,
         role,
-        institutionId: finalInstitutionId,
         assignedBy: session.user.id,
-      },
-      include: {
-        institution: true,
       },
     })
 
@@ -138,8 +86,6 @@ export async function POST(
       role: {
         id: roleAssignment.id,
         role: roleAssignment.role,
-        institutionId: roleAssignment.institutionId,
-        institutionName: roleAssignment.institution?.name || null,
         assignedAt: roleAssignment.assignedAt,
         assignedBy: roleAssignment.assignedBy,
       },

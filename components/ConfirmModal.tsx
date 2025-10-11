@@ -8,9 +8,10 @@ type ConfirmModalProps = {
   message: string
   confirmLabel?: string
   cancelLabel?: string
-  variant?: 'danger' | 'warning'
-  onConfirm: () => void
-  onCancel: () => void
+  variant?: 'danger' | 'warning' | 'primary'
+  onConfirm?: () => void
+  onCancel?: () => void
+  hideButtons?: boolean
 }
 
 export function ConfirmModal({
@@ -21,16 +22,21 @@ export function ConfirmModal({
   cancelLabel = 'Zrušiť',
   variant = 'danger',
   onConfirm,
-  onCancel
+  onCancel,
+  hideButtons = false
 }: ConfirmModalProps) {
   if (!isOpen) return null
 
   const confirmButtonClass = variant === 'danger'
     ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+    : variant === 'primary'
+    ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
     : 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500'
 
   const iconClass = variant === 'danger'
     ? 'text-red-600'
+    : variant === 'primary'
+    ? 'text-blue-600'
     : 'text-yellow-600'
 
   return (
@@ -51,32 +57,40 @@ export function ConfirmModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onCancel}
-            data-testid="confirm-modal-close-button"
-            className="text-gray-400 hover:text-gray-500 flex-shrink-0"
-          >
-            <XMarkIcon className="h-6 w-6" />
-          </button>
+          {!hideButtons && onCancel && (
+            <button
+              onClick={onCancel}
+              data-testid="confirm-modal-close-button"
+              className="text-gray-400 hover:text-gray-500 flex-shrink-0"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
-          <button
-            onClick={onCancel}
-            data-testid="confirm-modal-cancel-button"
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            {cancelLabel}
-          </button>
-          <button
-            onClick={onConfirm}
-            data-testid="confirm-modal-confirm-button"
-            className={`px-4 py-2 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${confirmButtonClass}`}
-          >
-            {confirmLabel}
-          </button>
-        </div>
+        {!hideButtons && (
+          <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-lg">
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                data-testid="confirm-modal-cancel-button"
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                {cancelLabel}
+              </button>
+            )}
+            {onConfirm && (
+              <button
+                onClick={onConfirm}
+                data-testid="confirm-modal-confirm-button"
+                className={`px-4 py-2 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${confirmButtonClass}`}
+              >
+                {confirmLabel}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

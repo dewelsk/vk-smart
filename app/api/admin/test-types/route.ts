@@ -52,9 +52,10 @@ export async function GET(request: NextRequest) {
       include: {
         _count: {
           select: {
-            categories: true
-          }
-        }
+            categories: true,
+            conditions: true,
+          },
+        },
       }
     })
 
@@ -64,6 +65,7 @@ export async function GET(request: NextRequest) {
       name: type.name,
       description: type.description,
       categoryCount: type._count.categories,
+      conditionCount: type._count.conditions,
       createdAt: type.createdAt,
       updatedAt: type.updatedAt
     }))

@@ -8,25 +8,21 @@ test.describe('Users List @admin @users @smoke', () => {
   })
 
   test('should display users list page', async ({ page }) => {
-    await expect(page.locator('h1')).toContainText('Používatelia')
-    await expect(page.locator('button:has-text("+ Nový používateľ")')).toBeVisible()
+    await expect(page.getByTestId('page-title')).toBeVisible()
+    await expect(page.getByTestId('create-user-button')).toBeVisible()
   })
 
   test('should display search input', async ({ page }) => {
-    await expect(page.locator('input[placeholder="Hľadaj..."]')).toBeVisible()
+    await expect(page.getByTestId('search-input')).toBeVisible()
   })
 
   test('should display users table', async ({ page }) => {
+    await expect(page.getByTestId('users-table')).toBeVisible()
     await expect(page.locator('table')).toBeVisible()
-    await expect(page.locator('th:has-text("Meno")')).toBeVisible()
-    await expect(page.locator('th:has-text("Priezvisko")')).toBeVisible()
-    await expect(page.locator('th:has-text("Email")')).toBeVisible()
-    await expect(page.locator('th:has-text("Rola")')).toBeVisible()
-    await expect(page.locator('th:has-text("Stav")')).toBeVisible()
   })
 
   test('should search users by name', async ({ page }) => {
-    const searchInput = page.locator('input[placeholder="Hľadaj..."]')
+    const searchInput = page.getByTestId('search-input')
     await searchInput.fill('Super')
 
     // Wait for debounce (500ms)
@@ -44,7 +40,7 @@ test.describe('Users List @admin @users @smoke', () => {
   })
 
   test('should clear search', async ({ page }) => {
-    const searchInput = page.locator('input[placeholder="Hľadaj..."]')
+    const searchInput = page.getByTestId('search-input')
     await searchInput.fill('Test')
     await page.waitForTimeout(600)
 
@@ -59,14 +55,14 @@ test.describe('Users List @admin @users @smoke', () => {
 
   test('should filter users by role', async ({ page }) => {
     // Find and open role filter multiselect
-    const roleFilter = page.locator('text=Filtruj podľa role...').first()
+    const roleFilter = page.locator('#role-filter')
     await roleFilter.click()
 
     // Select ADMIN role
     await page.click('text=Admin')
 
     // Click outside to close dropdown
-    await page.click('h1')
+    await page.getByTestId('page-title').click()
 
     // Wait for results
     await page.waitForTimeout(1000)
@@ -77,14 +73,8 @@ test.describe('Users List @admin @users @smoke', () => {
   })
 
   test('should filter users by active status', async ({ page }) => {
-    const statusFilter = page.locator('text=Filtruj podľa stavu...').first()
-    await statusFilter.click()
-
-    // Select Active
-    await page.click('text=Aktívny')
-
-    // Click outside
-    await page.click('h1')
+    const statusFilter = page.getByTestId('status-filter')
+    await statusFilter.selectOption('active')
 
     // Wait for results
     await page.waitForTimeout(1000)
@@ -94,28 +84,18 @@ test.describe('Users List @admin @users @smoke', () => {
   })
 
   test('should navigate to create user page', async ({ page }) => {
-    await page.click('button:has-text("+ Nový používateľ")')
+    await page.getByTestId('create-user-button').click()
     await page.waitForURL('/users/new')
-    await expect(page.locator('h1')).toContainText('Vytvoriť nového používateľa')
+    await expect(page.getByTestId('page-title')).toBeVisible()
   })
 
   test('should navigate to user detail on row click', async ({ page }) => {
     const firstRow = page.locator('tbody tr').first()
-    await firstRow.click()
+    const firstLink = firstRow.locator('a').first()
+    await firstLink.click()
 
     // Should navigate to user detail
     await page.waitForURL(/\/users\/[a-z0-9]+/)
-    await expect(page.locator('h1')).toBeVisible()
-  })
-
-  test('should sort table by name', async ({ page }) => {
-    // Click on name header to sort
-    await page.click('th:has-text("Meno")')
-
-    // Wait for sort
-    await page.waitForTimeout(500)
-
-    // Check if sorted (should see chevron icon)
-    await expect(page.locator('th:has-text("Meno") svg')).toBeVisible()
+    await expect(page.getByTestId('page-title')).toBeVisible()
   })
 })

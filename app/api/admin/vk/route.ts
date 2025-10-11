@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { VKStatus  } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getReadinessIndicator } from '@/lib/vk-validation'
+import { getReadinessIndicator, getGroupedIssues } from '@/lib/vk-validation'
 
 
 // GET /api/admin/vk - List VK with filters
@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
 
     // Filters
     const search = searchParams.get('search') || ''
-    const institutionId = searchParams.get('institutionId') || ''
     const status = searchParams.get('status') || ''
     const gestorId = searchParams.get('gestorId') || ''
     const page = parseInt(searchParams.get('page') || '1')
@@ -28,19 +27,6 @@ export async function GET(request: NextRequest) {
 
     // Build where clause
     const where: any = {}
-
-    // RBAC: Admin/Gestor/Komisia see only VK from their institutions
-    if (session.user.role !== 'SUPERADMIN') {
-      const userInstitutionIds = session.user.institutions.map((i) => i.id)
-      where.institutionId = {
-        in: userInstitutionIds,
-      }
-    }
-
-    // Institution filter (only for superadmin)
-    if (institutionId && session.user.role === 'SUPERADMIN') {
-      where.institutionId = institutionId
-    }
 
     // Status filter
     if (status) {
@@ -68,8 +54,8 @@ export async function GET(request: NextRequest) {
       orderBy.identifier = sortOrder
     } else if (sortBy === 'position') {
       orderBy.position = sortOrder
-    } else if (sortBy === 'date') {
-      orderBy.date = sortOrder
+    } else if (sortBy === 'date' || sortBy === 'startDateTime') {
+      orderBy.startDateTime = sortOrder
     } else if (sortBy === 'status') {
       orderBy.status = sortOrder
     } else {
@@ -84,13 +70,6 @@ export async function GET(request: NextRequest) {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          institution: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
-          },
           gestor: {
             select: {
               id: true,
@@ -119,6 +98,7 @@ export async function GET(request: NextRequest) {
               },
             },
           },
+          evaluationConfig: true,
         },
       }),
       prisma.vyberoveKonanie.count({ where }),
@@ -127,6 +107,7 @@ export async function GET(request: NextRequest) {
     // Format response
     const formattedVKs = vks.map((vk) => {
       const validation = getReadinessIndicator(vk as any)
+      const { errors, warnings } = getGroupedIssues(vk as any)
 
       return {
         id: vk.id,
@@ -136,11 +117,10 @@ export async function GET(request: NextRequest) {
         organizationalUnit: vk.organizationalUnit,
         serviceField: vk.serviceField,
         serviceType: vk.serviceType,
-        date: vk.date,
+        startDateTime: vk.startDateTime,
         numberOfPositions: vk.numberOfPositions,
         status: vk.status,
         createdAt: vk.createdAt,
-        institution: vk.institution,
         gestor: vk.gestor,
         candidatesCount: vk.candidates.length,
         testsCount: vk.assignedTests.length,
@@ -148,6 +128,8 @@ export async function GET(request: NextRequest) {
           status: validation.status,
           count: validation.count,
           label: validation.label,
+          errors: errors.map(e => e.message),
+          warnings: warnings.map(w => w.message),
         },
       }
     })
@@ -182,31 +164,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       identifier,
-      institutionId,
       selectionType,
       organizationalUnit,
       serviceField,
       position,
       serviceType,
-      date,
+      startDateTime,
       numberOfPositions,
       gestorId,
     } = body
 
     // Validation
-    if (!identifier || !institutionId || !selectionType || !organizationalUnit || !serviceField || !position || !serviceType || !date) {
+    if (!identifier || !selectionType || !organizationalUnit || !serviceField || !position || !serviceType || !startDateTime) {
       return NextResponse.json(
         { error: 'All required fields must be provided' },
         { status: 400 }
       )
-    }
-
-    // RBAC: Admin can only create VK for their institutions
-    if (session.user.role === 'ADMIN') {
-      const userInstitutionIds = session.user.institutions.map((i) => i.id)
-      if (!userInstitutionIds.includes(institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
     }
 
     // Check if identifier exists
@@ -221,38 +194,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if institution exists
-    const institution = await prisma.institution.findUnique({
-      where: { id: institutionId },
-    })
-
-    if (!institution) {
-      return NextResponse.json({ error: 'Institution not found' }, { status: 404 })
-    }
-
     // Create VK
     const vk = await prisma.vyberoveKonanie.create({
       data: {
         identifier,
-        institutionId,
         selectionType,
         organizationalUnit,
         serviceField,
         position,
         serviceType,
-        date: new Date(date),
+        startDateTime: new Date(startDateTime),
         numberOfPositions: numberOfPositions || 1,
         gestorId: gestorId || null,
         createdById: session.user.id,
       },
       include: {
-        institution: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
         gestor: {
           select: {
             id: true,
@@ -269,7 +225,6 @@ export async function POST(request: NextRequest) {
         identifier: vk.identifier,
         position: vk.position,
         status: vk.status,
-        institution: vk.institution,
         gestor: vk.gestor,
       },
     })

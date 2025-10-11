@@ -17,7 +17,18 @@ interface VKTest {
   test: {
     id: string
     name: string
-    type: string
+    testTypeId: string
+    testType: {
+      id: string
+      name: string
+      description: string | null
+    } | null
+    testTypeConditionId: string | null
+    testTypeCondition: {
+      id: string
+      name: string
+      description: string | null
+    } | null
     totalQuestions: number
   }
   questionCount: number
@@ -214,7 +225,7 @@ export function TestsTab({ vk, onRefresh }: TestsTabProps) {
 
     // Apply type filter
     if (typeFilter) {
-      filtered = filtered.filter(test => test.type === typeFilter)
+      filtered = filtered.filter(test => test.testTypeId === typeFilter)
     }
 
     return filtered
@@ -224,7 +235,13 @@ export function TestsTab({ vk, onRefresh }: TestsTabProps) {
 
   // Get unique categories and types for filters
   const categories = Array.from(new Set(availableTests.map(t => t.category).filter(Boolean)))
-  const types = Array.from(new Set(availableTests.map(t => t.type).filter(Boolean)))
+  const types = Array.from(
+    new Map(
+      availableTests
+        .filter((t) => t.testType)
+        .map((t) => [t.testType.id, t.testType])
+    ).values()
+  )
 
   if (loading) {
     return (
@@ -241,16 +258,16 @@ export function TestsTab({ vk, onRefresh }: TestsTabProps) {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-lg font-semibold text-gray-900">Pridelené testy</h2>
 
-        {vk.status === 'PRIPRAVA' && (
-          <button
-            onClick={openAddModal}
-            className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-blue-700"
-            data-testid="add-test-button"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Pridať test
-          </button>
-        )}
+        {/* MVP: Allow adding tests in any status */}
+        {/* TODO: In production, restrict to PRIPRAVA only */}
+        <button
+          onClick={openAddModal}
+          className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-blue-700"
+          data-testid="add-test-button"
+        >
+          <PlusIcon className="h-4 w-4" />
+          Pridať test
+        </button>
       </div>
 
       {/* Assigned Tests */}
@@ -273,7 +290,14 @@ export function TestsTab({ vk, onRefresh }: TestsTabProps) {
                     Test #{vkTest.level}
                   </h3>
                   <p className="text-sm text-gray-600 mt-1">{vkTest.test.name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Typ: {vkTest.test.type}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Typ: {vkTest.test.testType?.name || '—'}
+                    {vkTest.test.testTypeCondition && (
+                      <>
+                        {' · '}Podmienka: {vkTest.test.testTypeCondition.name}
+                      </>
+                    )}
+                  </p>
                 </div>
 
                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -303,18 +327,18 @@ export function TestsTab({ vk, onRefresh }: TestsTabProps) {
                 </div>
               </div>
 
-              {vk.status === 'PRIPRAVA' && (
-                <div className="flex gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    onClick={() => handleDeleteClick(vkTest.id)}
-                    className="inline-flex items-center gap-2 border border-red-300 text-red-700 bg-white text-sm font-medium px-4 py-2 rounded-md hover:bg-red-50"
-                    data-testid={`delete-test-button-${vkTest.level}`}
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                    Odstrániť
-                  </button>
-                </div>
-              )}
+              {/* MVP: Allow deleting tests in any status */}
+              {/* TODO: In production, restrict to PRIPRAVA only */}
+              <div className="flex gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => handleDeleteClick(vkTest.id)}
+                  className="inline-flex items-center gap-2 border border-red-300 text-red-700 bg-white text-sm font-medium px-4 py-2 rounded-md hover:bg-red-50"
+                  data-testid={`delete-test-button-${vkTest.level}`}
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  Odstrániť
+                </button>
+              </div>
             </div>
           ))
         )}
@@ -389,9 +413,9 @@ export function TestsTab({ vk, onRefresh }: TestsTabProps) {
                       data-testid="type-filter"
                     >
                       <option value="">Všetky typy</option>
-                      {types.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
+                      {types.map((type: any) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
                         </option>
                       ))}
                     </select>
@@ -430,7 +454,12 @@ export function TestsTab({ vk, onRefresh }: TestsTabProps) {
                           <div className="flex-1">
                             <h4 className="font-medium text-gray-900">{test.name}</h4>
                             <p className="text-sm text-gray-600 mt-1">
-                              Typ: {test.type}
+                              Typ: {test.testType?.name || '—'}
+                              {test.testTypeCondition && (
+                                <>
+                                  {' · '}Podmienka: {test.testTypeCondition.name}
+                                </>
+                              )}
                               {test.category && ` • Kategória: ${test.category.name}`}
                             </p>
                             <p className="text-sm text-gray-500 mt-1">
@@ -463,7 +492,7 @@ export function TestsTab({ vk, onRefresh }: TestsTabProps) {
                 className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-blue-700"
                 data-testid="save-test-button"
               >
-                Uložiť test
+                Vybrať test
               </button>
             </div>
           </div>

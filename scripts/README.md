@@ -4,6 +4,23 @@ Utility scripty pre projekt.
 
 ---
 
+## Import batérie otázok
+
+- **`import-question-battery.ts`** – načíta kategórie a otázky z dokumentu „Bateŕia otázok RR - komisii.docx“ a uloží ich do databázy.
+
+### Použitie
+
+```bash
+npx tsx scripts/import-question-battery.ts
+
+# Prípadne z vlastnej cesty
+npx tsx scripts/import-question-battery.ts /cesta/k/súboru.docx
+```
+
+Skript je idempotentný – opätovné spustenie aktualizuje existujúce záznamy a nevyrobí duplicity.
+
+---
+
 ## ASCII Wireframe Generator
 
 ### Súbory

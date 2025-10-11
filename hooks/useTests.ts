@@ -1,9 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
+type TestTypeSummary = {
+  id: string
+  name: string
+  description: string | null
+}
+
+type TestTypeConditionSummary = {
+  id: string
+  name: string
+  description: string | null
+}
+
 export type Test = {
   id: string
   name: string
-  type: 'ODBORNY' | 'VSEOBECNY' | 'STATNY_JAZYK' | 'CUDZI_JAZYK' | 'IT_ZRUCNOSTI' | 'SCHOPNOSTI_VLASTNOSTI'
+  testTypeId: string
+  testType: TestTypeSummary | null
+  testTypeConditionId: string | null
+  testTypeCondition: TestTypeConditionSummary | null
   description: string | null
   questionCount: number
   allowedQuestionTypes?: string[]
@@ -36,7 +51,7 @@ export type Test = {
 
 type UseTestsParams = {
   search?: string
-  type?: string
+  testTypeId?: string
   approved?: boolean | 'all'
   authorId?: string
   categoryId?: string
@@ -58,7 +73,7 @@ async function fetchTests(params: UseTestsParams): Promise<TestsResponse> {
   const queryParams = new URLSearchParams()
 
   if (params.search) queryParams.set('search', params.search)
-  if (params.type) queryParams.set('type', params.type)
+  if (params.testTypeId) queryParams.set('type', params.testTypeId)
   if (params.approved !== undefined && params.approved !== 'all') {
     queryParams.set('approved', String(params.approved))
   }
@@ -110,14 +125,14 @@ type UpdateTestData = {
   id: string
   name?: string
   description?: string | null
-  difficulty?: number
+  testTypeId?: string
+  testTypeConditionId?: string | null
   recommendedDuration?: number
   recommendedQuestionCount?: number
   recommendedScore?: number
   approved?: boolean
   practiceEnabled?: boolean
   categoryId?: string
-  allowedQuestionTypes?: string[]
   questions?: any[]
 }
 

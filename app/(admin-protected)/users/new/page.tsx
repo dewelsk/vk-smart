@@ -1,22 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Select from 'react-select'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import Link from 'next/link'
-
-type Institution = {
-  id: string
-  code: string
-  name: string
-}
-
-type InstitutionOption = {
-  value: string
-  label: string
-}
 
 type RoleOption = {
   value: string
@@ -27,7 +16,6 @@ export default function NewUserPage() {
   const router = useRouter()
   const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
-  const [institutions, setInstitutions] = useState<InstitutionOption[]>([])
 
   // Role options based on current user's role
   const roleOptions: RoleOption[] = session?.user?.role === 'SUPERADMIN'
@@ -50,31 +38,9 @@ export default function NewUserPage() {
     email: '',
     role: roleOptions[0],
     note: '',
-    institutionIds: [] as InstitutionOption[],
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Fetch institutions
-  useEffect(() => {
-    fetchInstitutions()
-  }, [])
-
-  async function fetchInstitutions() {
-    try {
-      const res = await fetch('/api/admin/institutions')
-      const data = await res.json()
-
-      if (data.institutions) {
-        const options: InstitutionOption[] = data.institutions.map((inst: Institution) => ({
-          value: inst.id,
-          label: `${inst.code} - ${inst.name}`,
-        }))
-        setInstitutions(options)
-      }
-    } catch (error) {
-      console.error('Failed to fetch institutions:', error)
-    }
-  }
 
   function validate() {
     const newErrors: Record<string, string> = {}
@@ -113,7 +79,6 @@ export default function NewUserPage() {
           email: formData.email || null,
           role: formData.role.value,
           note: formData.note || null,
-          institutionIds: formData.institutionIds.map(i => i.value),
         }),
       })
 
@@ -145,7 +110,7 @@ export default function NewUserPage() {
           <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
         </Link>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 data-testid="page-title" className="text-3xl font-bold text-gray-900">
             Pridať používateľa
           </h1>
           <p className="mt-2 text-gray-600">
@@ -248,24 +213,6 @@ export default function NewUserPage() {
               classNamePrefix="select"
             />
             {errors.role && <p className="mt-1 text-sm text-red-600">{errors.role}</p>}
-          </div>
-
-          {/* Institutions */}
-          <div>
-            <label htmlFor="institutions" className="block text-sm font-medium text-gray-700 mb-2">
-              Rezorty
-            </label>
-            <Select
-              isMulti
-              value={formData.institutionIds}
-              onChange={(selected) =>
-                setFormData({ ...formData, institutionIds: selected as InstitutionOption[] })
-              }
-              options={institutions}
-              placeholder="Vyberte rezorty..."
-              className="basic-multi-select"
-              classNamePrefix="select"
-            />
           </div>
 
           {/* Note */}

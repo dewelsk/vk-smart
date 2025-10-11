@@ -6,24 +6,17 @@ import { useRouter } from 'next/navigation'
 import Select from 'react-select'
 import { DataTable } from '@/components/table/DataTable'
 import { PageHeader } from '@/components/PageHeader'
-import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, MagnifyingGlassIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useTests, type Test } from '@/hooks/useTests'
-import { useTestCategories } from '@/hooks/useTestCategories'
+import { useTests, useDeleteTest, type Test } from '@/hooks/useTests'
+import { useTestTypes } from '@/hooks/useTestTypes'
+import { ConfirmModal } from '@/components/ConfirmModal'
+import { toast } from 'react-hot-toast'
 
 type TestTypeOption = {
   value: string
   label: string
 }
-
-const testTypeOptions: TestTypeOption[] = [
-  { value: 'ODBORNY', label: 'Odborný' },
-  { value: 'VSEOBECNY', label: 'Všeobecný' },
-  { value: 'STATNY_JAZYK', label: 'Štátny jazyk' },
-  { value: 'CUDZI_JAZYK', label: 'Cudzí jazyk' },
-  { value: 'IT_ZRUCNOSTI', label: 'IT zručnosti' },
-  { value: 'SCHOPNOSTI_VLASTNOSTI', label: 'Schopnosti a vlastnosti' },
-]
 
 function getQuestionWord(count: number) {
   if (count === 1) return 'otázka'
@@ -31,28 +24,29 @@ function getQuestionWord(count: number) {
   return 'otázok'
 }
 
-function getTestTypeBadge(type: string) {
-  const colors: Record<string, string> = {
-    ODBORNY: 'bg-purple-100 text-purple-800',
-    VSEOBECNY: 'bg-blue-100 text-blue-800',
-    STATNY_JAZYK: 'bg-green-100 text-green-800',
-    CUDZI_JAZYK: 'bg-orange-100 text-orange-800',
-    IT_ZRUCNOSTI: 'bg-cyan-100 text-cyan-800',
-    SCHOPNOSTI_VLASTNOSTI: 'bg-pink-100 text-pink-800',
+function getTestTypeBadge(testType: { id: string; name: string } | null) {
+  if (!testType) {
+    return (
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+        Neurčený
+      </span>
+    )
   }
 
-  const labels: Record<string, string> = {
-    ODBORNY: 'Odborný',
-    VSEOBECNY: 'Všeobecný',
-    STATNY_JAZYK: 'Štátny jazyk',
-    CUDZI_JAZYK: 'Cudzí jazyk',
-    IT_ZRUCNOSTI: 'IT zručnosti',
-    SCHOPNOSTI_VLASTNOSTI: 'Schopnosti a vlastnosti',
-  }
+  // Dynamické farby podľa názvu typu
+  let colorClass = 'bg-gray-100 text-gray-800'
+  const name = testType.name.toLowerCase()
+
+  if (name.includes('odborn')) colorClass = 'bg-purple-100 text-purple-800'
+  else if (name.includes('všeobecn')) colorClass = 'bg-blue-100 text-blue-800'
+  else if (name.includes('štátn') || name.includes('jazyk')) colorClass = 'bg-green-100 text-green-800'
+  else if (name.includes('cudz') || name.includes('anglick')) colorClass = 'bg-orange-100 text-orange-800'
+  else if (name.includes('it') || name.includes('počítač')) colorClass = 'bg-cyan-100 text-cyan-800'
+  else if (name.includes('schopnos') || name.includes('vlastnos')) colorClass = 'bg-pink-100 text-pink-800'
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors[type] || 'bg-gray-100 text-gray-800'}`}>
-      {labels[type] || type}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
+      {testType.name}
     </span>
   )
 }
@@ -62,13 +56,15 @@ export default function TestsPage() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<TestTypeOption | null>(null)
-  const [categoryFilter, setCategoryFilter] = useState<{ value: string; label: string } | null>(null)
   const [approvedFilter, setApprovedFilter] = useState<'all' | boolean>('all')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletingTest, setDeletingTest] = useState<Test | null>(null)
 
-  // Fetch categories for filter
-  const { data: categoriesData } = useTestCategories({ limit: 100 })
+  // Fetch test types for filter
+  const { data: testTypesData } = useTestTypes({ limit: 100 })
+  const deleteTestMutation = useDeleteTest()
 
   // Debounce search input
   useEffect(() => {
@@ -83,22 +79,21 @@ export default function TestsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setPage(1)
-  }, [typeFilter, categoryFilter, approvedFilter])
+  }, [typeFilter, approvedFilter])
 
   // Use React Query hook
   const { data, isLoading, isFetching, error } = useTests({
     search: debouncedSearch,
-    type: typeFilter?.value,
-    categoryId: categoryFilter?.value,
+    testTypeId: typeFilter?.value,
     approved: approvedFilter,
     page,
     limit: pageSize,
   })
 
-  // Build category options from fetched categories
-  const categoryOptions = categoriesData?.categories.map(cat => ({
-    value: cat.id,
-    label: cat.name
+  // Build test type options from fetched test types
+  const testTypeOptions = testTypesData?.testTypes.map(type => ({
+    value: type.id,
+    label: type.name
   })) || []
 
   const tests = data?.tests ?? []
@@ -107,6 +102,24 @@ export default function TestsPage() {
     totalPages: data?.pages ?? 1,
     totalItems: data?.total ?? 0,
     pageSize: data?.limit ?? 10,
+  }
+
+  const handleDeleteClick = (test: Test) => {
+    setDeletingTest(test)
+    setShowDeleteModal(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingTest) return
+
+    try {
+      await deleteTestMutation.mutateAsync(deletingTest.id)
+      toast.success('Test bol úspešne vymazaný')
+      setShowDeleteModal(false)
+      setDeletingTest(null)
+    } catch (error: any) {
+      toast.error(error.message || 'Nepodarilo sa vymazať test')
+    }
   }
 
   // Column definitions
@@ -124,9 +137,23 @@ export default function TestsPage() {
       ),
     },
     {
-      accessorKey: 'type',
-      header: 'Typ',
-      cell: ({ row }) => getTestTypeBadge(row.original.type),
+      accessorKey: 'testType',
+      header: 'Typ testu',
+      cell: ({ row }) => getTestTypeBadge(row.original.testType),
+    },
+    {
+      accessorKey: 'testTypeCondition',
+      header: 'Podmienky',
+      cell: ({ row }) => {
+        if (!row.original.testTypeCondition) {
+          return <span className="text-gray-400">-</span>
+        }
+        return (
+          <span className="text-sm text-gray-700">
+            {row.original.testTypeCondition.name}
+          </span>
+        )
+      },
     },
     {
       accessorKey: 'questionCount',
@@ -142,32 +169,6 @@ export default function TestsPage() {
       accessorKey: 'recommendedScore',
       header: 'Úspešnosť',
       cell: ({ row }) => row.original.recommendedScore ? `${row.original.recommendedScore}%` : '-',
-    },
-    {
-      accessorKey: 'difficulty',
-      header: 'Náročnosť',
-      cell: ({ row }) => {
-        const difficulty = row.original.difficulty || 5
-        const percentage = (difficulty / 10) * 100
-
-        return (
-          <div className="flex items-center gap-2">
-            <div className="w-24 bg-gray-200 rounded-full h-2">
-              <div
-                className="h-2 rounded-full transition-all"
-                style={{
-                  width: `${percentage}%`,
-                  backgroundColor:
-                    difficulty <= 3 ? '#10B981' :  // Easy - green
-                    difficulty <= 6 ? '#F59E0B' :  // Medium - orange
-                    '#EF4444'                      // Hard - red
-                }}
-              />
-            </div>
-            <span className="text-xs text-gray-600 w-8">{difficulty}/10</span>
-          </div>
-        )
-      },
     },
     {
       accessorKey: 'usage',
@@ -209,10 +210,26 @@ export default function TestsPage() {
         </span>
       ),
     },
+    {
+      id: 'actions',
+      header: 'Akcie',
+      cell: ({ row }) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation() // Prevent row click navigation
+            handleDeleteClick(row.original)
+          }}
+          className="text-red-600 hover:text-red-800 p-2 rounded-md hover:bg-red-50 transition-colors"
+          title="Vymazať test"
+        >
+          <TrashIcon className="h-5 w-5" />
+        </button>
+      ),
+    },
   ]
 
   return (
-    <div className="space-y-6">
+    <div data-testid="tests-page" className="space-y-6">
       <PageHeader
         title="Testy"
         description="Pool hotových testov pre výberové konania"
@@ -229,7 +246,7 @@ export default function TestsPage() {
 
       {/* Filters */}
       <div className="bg-white shadow rounded-lg p-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Search */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -252,18 +269,6 @@ export default function TestsPage() {
               value={typeFilter}
               onChange={(option) => setTypeFilter(option)}
               options={testTypeOptions}
-              className="text-sm"
-            />
-          </div>
-
-          {/* Category filter */}
-          <div>
-            <Select
-              isClearable
-              placeholder="Všetky kategórie"
-              value={categoryFilter}
-              onChange={(option) => setCategoryFilter(option)}
-              options={categoryOptions}
               className="text-sm"
             />
           </div>
@@ -323,6 +328,19 @@ export default function TestsPage() {
           />
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteModal}
+        title="Vymazať test"
+        message={`Naozaj chcete vymazať test "${deletingTest?.name}"? Táto akcia je nevratná.`}
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => {
+          setShowDeleteModal(false)
+          setDeletingTest(null)
+        }}
+      />
     </div>
   )
 }

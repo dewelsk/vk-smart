@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getToken } from 'next-auth/jwt'
 
 async function getCandidateFromRequest(request: NextRequest) {
+  // Try JWT token first (for admin switch)
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  })
+
+  if (token?.candidateId) {
+    return await prisma.candidate.findUnique({
+      where: { id: token.candidateId as string }
+    })
+  }
+
+  // Fallback to header (for regular applicant login)
   const candidateId = request.headers.get('x-candidate-id')
   if (!candidateId) return null
 
   return await prisma.candidate.findUnique({
-    where: { id: candidateId },
-    include: { user: true }
+    where: { id: candidateId }
   })
 }
 
@@ -169,7 +182,7 @@ export async function POST(
         correctCount: evaluation.correctCount,
         totalQuestions: evaluation.totalQuestions
       },
-      redirectUrl: `/applicant/test/${sessionId}/result`
+      redirectUrl: `/applicant/dashboard`
     })
   } catch (error) {
     console.error('Submit test error:', error)

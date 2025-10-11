@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTest, useUpdateTest, useCloneTest, useDeleteTest } from '@/hooks/useTests'
-import { useTestCategories } from '@/hooks/useTestCategories'
+import { useTestTypes, useTestType } from '@/hooks/useTestTypes'
 import { PageHeader } from '@/components/PageHeader'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useSession } from 'next-auth/react'
@@ -43,27 +43,28 @@ export default function TestDetailPage({ params }: Props) {
   const testId = params.id
 
   const { data, isLoading, error } = useTest(testId)
-  const { data: categoriesData } = useTestCategories({ limit: 100 })
+  const { data: testTypesData } = useTestTypes({ limit: 100 })
   const updateMutation = useUpdateTest()
   const cloneMutation = useCloneTest()
   const deleteMutation = useDeleteTest()
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [difficulty, setDifficulty] = useState(5)
   const [recommendedDuration, setRecommendedDuration] = useState(45)
-  const [categoryId, setCategoryId] = useState('')
   const [approved, setApproved] = useState(false)
   const [practiceEnabled, setPracticeEnabled] = useState(false)
-  const [allowedQuestionTypes, setAllowedQuestionTypes] = useState<string[]>(['SINGLE_CHOICE'])
-  const [errors, setErrors] = useState<{ name?: string; categoryId?: string; allowedQuestionTypes?: string }>({})
+  const [selectedTestTypeId, setSelectedTestTypeId] = useState('')
+  const [selectedConditionId, setSelectedConditionId] = useState('')
+  const [errors, setErrors] = useState<{ name?: string; testType?: string }>({})
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [editingQuestion, setEditingQuestion] = useState<any>(null)
+  const [addingQuestion, setAddingQuestion] = useState(false)
+  const [deletingQuestion, setDeletingQuestion] = useState<{ question: any; index: number } | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const test = data?.test
-  const categories = categoriesData?.categories || []
-
+  const testTypes = testTypesData?.testTypes || []
+  const { data: selectedTypeDetail } = useTestType(selectedTestTypeId, Boolean(selectedTestTypeId))
   // Read active tab from URL
   useEffect(() => {
     const tab = searchParams?.get('tab') as TabType
@@ -77,50 +78,64 @@ export default function TestDetailPage({ params }: Props) {
     if (test) {
       setName(test.name)
       setDescription(test.description || '')
-      setDifficulty(test.difficulty || 5)
       setRecommendedDuration(test.recommendedDuration || 45)
-      setCategoryId(test.categoryId || '')
       setApproved(test.approved)
       setPracticeEnabled(test.practiceEnabled || false)
-      setAllowedQuestionTypes(Array.isArray(test.allowedQuestionTypes) ? test.allowedQuestionTypes : ['SINGLE_CHOICE'])
     }
   }, [test])
+
+  useEffect(() => {
+    if (!test) return
+
+    setSelectedTestTypeId(test.testTypeId)
+    setSelectedConditionId(test.testTypeConditionId || '')
+  }, [test])
+
+  useEffect(() => {
+    const conditions = selectedTypeDetail?.conditions ?? []
+
+    if (conditions.length === 0) {
+      if (selectedConditionId) {
+        setSelectedConditionId('')
+      }
+      return
+    }
+
+    const existing = conditions.some((condition) => condition.id === selectedConditionId)
+    if (!existing) {
+      setSelectedConditionId(conditions[0].id)
+    }
+  }, [selectedTypeDetail, selectedConditionId])
 
   function changeTab(tab: TabType) {
     setActiveTab(tab)
     router.push(`/tests/${testId}?tab=${tab}`, { scroll: false })
   }
 
-  const handleCheckboxChange = (value: string) => {
-    setAllowedQuestionTypes(prev => {
-      if (prev.includes(value)) {
-        // Don't allow unchecking if it's the last one
-        if (prev.length === 1) {
-          return prev
-        }
-        return prev.filter(t => t !== value)
-      } else {
-        return [...prev, value]
-      }
-    })
-    if (errors.allowedQuestionTypes) {
-      setErrors({ ...errors, allowedQuestionTypes: undefined })
+  const handleTestTypeSelectChange = (typeId: string) => {
+    if (!typeId) {
+      setSelectedTestTypeId('')
+      setSelectedConditionId('')
+      return
     }
+
+    setSelectedTestTypeId(typeId)
+    setSelectedConditionId('')
+  }
+
+  const handleConditionSelectChange = (conditionId: string) => {
+    setSelectedConditionId(conditionId)
   }
 
   const validate = () => {
-    const newErrors: { name?: string; categoryId?: string; allowedQuestionTypes?: string } = {}
+    const newErrors: { name?: string; testType?: string } = {}
 
     if (!name.trim()) {
       newErrors.name = 'Názov je povinný'
     }
 
-    if (!categoryId) {
-      newErrors.categoryId = 'Kategória je povinná'
-    }
-
-    if (allowedQuestionTypes.length === 0) {
-      newErrors.allowedQuestionTypes = 'Aspoň jeden typ otázky musí byť vybraný'
+    if (!selectedTestTypeId) {
+      newErrors.testType = 'Typ testu je povinný'
     }
 
     setErrors(newErrors)
@@ -144,12 +159,11 @@ export default function TestDetailPage({ params }: Props) {
         id: testId,
         name,
         description: description || null,
-        difficulty,
         recommendedDuration,
-        categoryId,
         approved,
         practiceEnabled,
-        allowedQuestionTypes,
+        testTypeId: selectedTestTypeId,
+        testTypeConditionId: selectedConditionId ? selectedConditionId : null,
       })
 
       toast.dismiss(toastId)
@@ -205,7 +219,7 @@ export default function TestDetailPage({ params }: Props) {
 
   const hasPermission = session?.user?.role === 'SUPERADMIN' || session?.user?.role === 'ADMIN' || (session?.user?.role === 'GESTOR' && test.author?.id === session?.user?.id)
   const isUsedInVK = test.usage.totalVKs > 0
-  const canEdit = hasPermission && !isUsedInVK
+  const canEdit = hasPermission // Removed !isUsedInVK restriction - tests can now be edited even if used in VK
   const canApprove = session?.user?.role === 'SUPERADMIN'
   const canDelete = hasPermission && !test.usage.hasActiveUsage
 
@@ -238,6 +252,53 @@ export default function TestDetailPage({ params }: Props) {
     } catch (error: any) {
       toast.dismiss(toastId)
       toast.error(error.message || 'Nepodarilo sa vymazať test')
+    }
+  }
+
+  const handleAddQuestion = () => {
+    // Create new empty question with default values
+    const newQuestion = {
+      id: `new-${Date.now()}`,
+      text: '',
+      questionType: 'SINGLE_CHOICE',
+      points: 1,
+      order: (test.questions || []).length + 1,
+      answers: [
+        { letter: 'A', text: '', isCorrect: false },
+        { letter: 'B', text: '', isCorrect: false },
+        { letter: 'C', text: '', isCorrect: false },
+      ],
+    }
+    setEditingQuestion(newQuestion)
+    setAddingQuestion(true)
+  }
+
+  const handleDeleteQuestionClick = (question: any, index: number) => {
+    setDeletingQuestion({ question, index })
+  }
+
+  const handleConfirmDeleteQuestion = async () => {
+    if (!deletingQuestion) return
+
+    const toastId = toast.loading('Mažem otázku...')
+    try {
+      // Remove the question from the questions array
+      const updatedQuestions = (test.questions || []).filter(
+        (_: any, idx: number) => idx !== deletingQuestion.index
+      )
+
+      // Update test with new questions array
+      await updateMutation.mutateAsync({
+        id: testId,
+        questions: updatedQuestions,
+      })
+
+      toast.dismiss(toastId)
+      toast.success('Otázka bola úspešne vymazaná')
+      setDeletingQuestion(null)
+    } catch (error: any) {
+      toast.dismiss(toastId)
+      toast.error(error.message || 'Nepodarilo sa vymazať otázku')
     }
   }
 
@@ -283,18 +344,6 @@ export default function TestDetailPage({ params }: Props) {
           </div>
         )}
       </div>
-
-      {/* Usage Warning */}
-      {isUsedInVK && (
-        <div className="p-4 bg-orange-50 border border-orange-200 rounded-md" data-testid="usage-warning">
-          <p className="text-sm text-orange-800">
-            🔒 Tento test bol použitý vo výberovom konaní a nemôže byť upravený. Pre zmeny vytvorte kópiu testu.
-          </p>
-          <p className="text-xs text-orange-600 mt-1">
-            Použitie: {test.usage.totalVKs} VK{test.usage.hasActiveUsage && ` (${test.usage.activeVKs} aktívne)`}
-          </p>
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow">
@@ -347,57 +396,68 @@ export default function TestDetailPage({ params }: Props) {
 
         <div className="p-6">
           {activeTab === 'overview' && (
-            <OverviewTab
-              test={test}
-              categories={categories}
-              canEdit={canEdit}
-              canApprove={canApprove}
-              name={name}
-              setName={setName}
-              description={description}
-              setDescription={setDescription}
-              difficulty={difficulty}
-              setDifficulty={setDifficulty}
-              recommendedDuration={recommendedDuration}
-              setRecommendedDuration={setRecommendedDuration}
-              categoryId={categoryId}
-              setCategoryId={setCategoryId}
-              approved={approved}
-              setApproved={setApproved}
-              practiceEnabled={practiceEnabled}
-              setPracticeEnabled={setPracticeEnabled}
-              allowedQuestionTypes={allowedQuestionTypes}
-              handleCheckboxChange={handleCheckboxChange}
-              errors={errors}
-              setErrors={setErrors}
-              handleSubmit={handleSubmit}
-              updateMutation={updateMutation}
-            />
+          <OverviewTab
+            test={test}
+            canEdit={canEdit}
+            canApprove={canApprove}
+            name={name}
+            setName={setName}
+            description={description}
+            setDescription={setDescription}
+            recommendedDuration={recommendedDuration}
+            setRecommendedDuration={setRecommendedDuration}
+            approved={approved}
+            setApproved={setApproved}
+            practiceEnabled={practiceEnabled}
+            setPracticeEnabled={setPracticeEnabled}
+            testTypes={testTypes}
+            selectedTestTypeId={selectedTestTypeId}
+            onTestTypeChange={handleTestTypeSelectChange}
+            selectedTypeDetail={selectedTypeDetail}
+            selectedConditionId={selectedConditionId}
+            onConditionChange={handleConditionSelectChange}
+            errors={errors}
+            setErrors={setErrors}
+            handleSubmit={handleSubmit}
+            updateMutation={updateMutation}
+          />
           )}
           {activeTab === 'questions' && (
             <QuestionsTab
               test={test}
               canEdit={canEdit}
               onEditQuestion={setEditingQuestion}
+              onAddQuestion={handleAddQuestion}
+              onDeleteQuestion={handleDeleteQuestionClick}
             />
           )}
           {activeTab === 'vks' && <VKsTab test={test} />}
         </div>
       </div>
 
-      {/* Edit Question Modal */}
+      {/* Edit/Add Question Modal */}
       {editingQuestion && (
         <EditQuestionModal
           question={editingQuestion}
-          allowedQuestionTypes={test.allowedQuestionTypes || []}
-          onClose={() => setEditingQuestion(null)}
+          allowedQuestionTypes={addingQuestion ? ['SINGLE_CHOICE'] : (test.allowedQuestionTypes || [])}
+          isNew={addingQuestion}
+          onClose={() => {
+            setEditingQuestion(null)
+            setAddingQuestion(false)
+          }}
           onSave={async (updatedQuestion) => {
-            const toastId = toast.loading('Ukladám zmeny otázky...')
+            const toastId = toast.loading(addingQuestion ? 'Pridávam otázku...' : 'Ukladám zmeny otázky...')
             try {
-              // Update the questions array with the edited question
-              const updatedQuestions = (test.questions || []).map((q: any) =>
-                q.id === updatedQuestion.id ? updatedQuestion : q
-              )
+              let updatedQuestions
+              if (addingQuestion) {
+                // Add new question to the array
+                updatedQuestions = [...(test.questions || []), updatedQuestion]
+              } else {
+                // Update existing question in the array
+                updatedQuestions = (test.questions || []).map((q: any) =>
+                  q.id === updatedQuestion.id ? updatedQuestion : q
+                )
+              }
 
               await updateMutation.mutateAsync({
                 id: testId,
@@ -405,17 +465,18 @@ export default function TestDetailPage({ params }: Props) {
               })
 
               toast.dismiss(toastId)
-              toast.success('Otázka bola úspešne aktualizovaná')
+              toast.success(addingQuestion ? 'Otázka bola úspešne pridaná' : 'Otázka bola úspešne aktualizovaná')
               setEditingQuestion(null)
+              setAddingQuestion(false)
             } catch (error: any) {
               toast.dismiss(toastId)
-              toast.error(error.message || 'Nepodarilo sa aktualizovať otázku')
+              toast.error(error.message || (addingQuestion ? 'Nepodarilo sa pridať otázku' : 'Nepodarilo sa aktualizovať otázku'))
             }
           }}
         />
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Test Confirmation Modal */}
       <ConfirmModal
         isOpen={showDeleteConfirm}
         title="Vymazať test"
@@ -425,6 +486,18 @@ export default function TestDetailPage({ params }: Props) {
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      {/* Delete Question Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!deletingQuestion}
+        title="Vymazať otázku"
+        message={`Naozaj chcete vymazať otázku "${deletingQuestion?.question?.text || 'túto otázku'}"? Táto akcia je nevratná.`}
+        confirmLabel="Vymazať"
+        cancelLabel="Zrušiť"
+        variant="danger"
+        onConfirm={handleConfirmDeleteQuestion}
+        onCancel={() => setDeletingQuestion(null)}
       />
     </div>
   )
@@ -445,30 +518,32 @@ function StatusBadge({ approved }: { approved: boolean }) {
 // Overview Tab Component
 function OverviewTab({
   test,
-  categories,
   canEdit,
   canApprove,
   name,
   setName,
   description,
   setDescription,
-  difficulty,
-  setDifficulty,
   recommendedDuration,
   setRecommendedDuration,
-  categoryId,
-  setCategoryId,
   approved,
   setApproved,
   practiceEnabled,
   setPracticeEnabled,
-  allowedQuestionTypes,
-  handleCheckboxChange,
+  testTypes,
+  selectedTestTypeId,
+  onTestTypeChange,
+  selectedTypeDetail,
+  selectedConditionId,
+  onConditionChange,
   errors,
   setErrors,
   handleSubmit,
   updateMutation,
 }: any) {
+  const typeConditions = selectedTypeDetail?.conditions ?? []
+  const selectedCondition = typeConditions.find((condition: any) => condition.id === selectedConditionId)
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Basic Information */}
@@ -533,47 +608,6 @@ function OverviewTab({
           />
         </div>
 
-        {/* Category */}
-        <div className="mb-4">
-          <label htmlFor="category" className="block text-sm font-medium text-gray-700">
-            Kategória *
-          </label>
-          <select
-            id="category"
-            data-testid="test-category-select"
-            data-error={!!errors.categoryId}
-            value={categoryId}
-            onChange={(e) => {
-              setCategoryId(e.target.value)
-              if (errors.categoryId) {
-                setErrors({ ...errors, categoryId: undefined })
-              }
-            }}
-            disabled={!canEdit}
-            className={`
-              mt-1 block w-full border rounded-md shadow-sm py-2 px-3
-              focus:outline-none focus:ring-1 sm:text-sm
-              ${!canEdit ? 'bg-gray-100 cursor-not-allowed' : ''}
-              ${errors.categoryId
-                ? 'border-red-500 focus:ring-red-200 focus:border-red-500'
-                : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
-              }
-            `}
-          >
-            <option value="">Vyberte kategóriu</option>
-            {categories.map((category: any) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-          {errors.categoryId && (
-            <p className="mt-2 text-sm text-red-600" data-testid="test-category-error">
-              {errors.categoryId}
-            </p>
-          )}
-        </div>
-
         {/* Author */}
         {test.author && (
           <div className="mb-4">
@@ -585,38 +619,74 @@ function OverviewTab({
         )}
       </div>
 
-      {/* Recommended Settings */}
+      {/* Settings */}
       <div className="border-t pt-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
           <CogIcon className="h-5 w-5 text-gray-600" />
-          Odporúčané nastavenia
+          Nastavenie
         </h3>
 
-        {/* Difficulty */}
+        {/* Test Type */}
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Náročnosť testu *
+          <label className="block text-sm font-medium text-gray-700" htmlFor="test-type-select">
+            Typ testu *
           </label>
-          <div className="flex items-center gap-4">
-            <input
-              data-testid="test-difficulty-slider"
-              type="range"
-              min="1"
-              max="10"
-              value={difficulty}
-              onChange={(e) => setDifficulty(parseInt(e.target.value))}
-              disabled={!canEdit}
-              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"
-            />
-            <span className="text-lg font-semibold text-gray-900 w-8 text-center" data-testid="test-difficulty-value">
-              {difficulty}
-            </span>
-          </div>
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>Najľahší</span>
-            <span>Najnáročnejší</span>
-          </div>
+          <select
+            id="test-type-select"
+            data-testid="test-type-select"
+            value={selectedTestTypeId}
+            onChange={(e) => {
+              onTestTypeChange(e.target.value)
+              if (errors.testType) {
+                setErrors({ ...errors, testType: undefined })
+              }
+            }}
+            disabled={!canEdit || testTypes.length === 0}
+            className={`mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-1 sm:text-sm ${
+              !canEdit || testTypes.length === 0
+                ? 'bg-gray-100 cursor-not-allowed border-gray-300'
+                : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+            }`}
+          >
+            <option value="">Vyberte typ testu</option>
+            {testTypes.map((type: any) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+          {errors.testType && (
+            <p className="mt-2 text-sm text-red-600">{errors.testType}</p>
+          )}
         </div>
+
+        {/* Test Type Condition */}
+        {typeConditions.length ? (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700" htmlFor="test-type-condition-select">
+              Podmienka
+            </label>
+            <select
+              id="test-type-condition-select"
+              data-testid="test-type-condition-select"
+              value={selectedConditionId || (typeConditions[0]?.id ?? '')}
+              onChange={(e) => onConditionChange(e.target.value)}
+              disabled={!canEdit}
+              className={`mt-1 block w-full border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-1 sm:text-sm ${
+                !canEdit ? 'bg-gray-100 cursor-not-allowed border-gray-300' : 'border-gray-300 focus:ring-blue-200 focus:border-blue-500'
+              }`}
+            >
+              {typeConditions.map((condition: any) => (
+                <option key={condition.id} value={condition.id}>
+                  {condition.name}
+                </option>
+              ))}
+            </select>
+            {selectedCondition?.description && (
+              <p className="mt-2 text-xs text-gray-500">{selectedCondition.description}</p>
+            )}
+          </div>
+        ) : null}
 
         {/* Recommended Duration */}
         <div className="mb-4">
@@ -647,45 +717,7 @@ function OverviewTab({
           </p>
         </div>
 
-        {/* Allowed Question Types */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Povolené typy otázok *
-          </label>
-          <div
-            data-testid="question-types-group"
-            data-error={!!errors.allowedQuestionTypes}
-            className={`
-              border rounded-md p-4 space-y-3
-              ${errors.allowedQuestionTypes ? 'border-red-500' : 'border-gray-300'}
-            `}
-          >
-            {QUESTION_TYPE_OPTIONS.map((option) => (
-              <div key={option.value} className="flex items-center">
-                <input
-                  id={`type-${option.value}`}
-                  data-testid={`question-type-${option.value.toLowerCase()}`}
-                  type="checkbox"
-                  checked={allowedQuestionTypes.includes(option.value)}
-                  onChange={() => handleCheckboxChange(option.value)}
-                  disabled={!canEdit || (allowedQuestionTypes.includes(option.value) && allowedQuestionTypes.length === 1)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
-                />
-                <label htmlFor={`type-${option.value}`} className="ml-2 block text-sm text-gray-900">
-                  {option.label}
-                </label>
-              </div>
-            ))}
-          </div>
-          {errors.allowedQuestionTypes && (
-            <p className="mt-2 text-sm text-red-600" data-testid="question-types-error">
-              {errors.allowedQuestionTypes}
-            </p>
-          )}
-          <p className="mt-2 text-xs text-gray-500">
-            Aspoň jeden typ musí byť vybraný. Tieto typy budú dostupné pre otázky v tomto teste.
-          </p>
-        </div>
+        {/* Allowed Question Types removed as requested */}
       </div>
 
       {/* Approval Status */}
@@ -773,7 +805,7 @@ function OverviewTab({
 }
 
 // Questions Tab Component
-function QuestionsTab({ test, canEdit, onEditQuestion }: any) {
+function QuestionsTab({ test, canEdit, onEditQuestion, onAddQuestion, onDeleteQuestion }: any) {
   const questions = test.questions || []
 
   if (questions.length === 0) {
@@ -782,6 +814,16 @@ function QuestionsTab({ test, canEdit, onEditQuestion }: any) {
         <QuestionMarkCircleIcon className="mx-auto h-12 w-12 text-gray-400" />
         <h3 className="mt-2 text-sm font-medium text-gray-900">Žiadne otázky</h3>
         <p className="mt-1 text-sm text-gray-500">Tento test zatiaľ neobsahuje žiadne otázky.</p>
+        {canEdit && (
+          <button
+            onClick={onAddQuestion}
+            data-testid="add-first-question-button"
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <QuestionMarkCircleIcon className="h-5 w-5" />
+            Pridať prvú otázku
+          </button>
+        )}
       </div>
     )
   }
@@ -790,12 +832,20 @@ function QuestionsTab({ test, canEdit, onEditQuestion }: any) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium text-gray-900">Otázky ({questions.length})</h3>
+        {canEdit && (
+          <button
+            onClick={onAddQuestion}
+            data-testid="add-question-button"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            <QuestionMarkCircleIcon className="h-5 w-5" />
+            Pridať otázku
+          </button>
+        )}
       </div>
 
       <div className="space-y-4" data-testid="questions-list">
         {questions.map((question: any, index: number) => {
-          const questionTypeLabel = QUESTION_TYPE_OPTIONS.find(opt => opt.value === question.questionType)?.label || question.questionType
-
           return (
             <div
               key={question.id || index}
@@ -821,12 +871,6 @@ function QuestionsTab({ test, canEdit, onEditQuestion }: any) {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                  <span
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800"
-                    data-testid={`question-type-${index}`}
-                  >
-                    {questionTypeLabel}
-                  </span>
                   <span
                     className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
                     data-testid={`question-points-${index}`}
@@ -870,9 +914,16 @@ function QuestionsTab({ test, canEdit, onEditQuestion }: any) {
                 </div>
               )}
 
-              {/* Edit Button */}
+              {/* Edit and Delete Buttons */}
               {canEdit && (
-                <div className="flex justify-end mt-3 pt-3 border-t border-gray-200">
+                <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-200">
+                  <button
+                    data-testid={`delete-question-${index}-button`}
+                    onClick={() => onDeleteQuestion(question, index)}
+                    className="px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                  >
+                    Vymazať
+                  </button>
                   <button
                     data-testid={`edit-question-${index}-button`}
                     onClick={() => onEditQuestion(question)}
@@ -911,11 +962,13 @@ function VKsTab({ test }: any) {
 function EditQuestionModal({
   question,
   allowedQuestionTypes,
+  isNew = false,
   onClose,
   onSave,
 }: {
   question: any
   allowedQuestionTypes: string[]
+  isNew?: boolean
   onClose: () => void
   onSave: (question: any) => Promise<void>
 }) {
@@ -1034,10 +1087,8 @@ function EditQuestionModal({
       newErrors.text = 'Text otázky je povinný'
     }
 
-    if (editedQuestion.answers.length < 2) {
-      newErrors.answers = 'Otázka musí mať aspoň 2 odpovede'
-    } else if (editedQuestion.answers.length > 6) {
-      newErrors.answers = 'Otázka môže mať maximálne 6 odpovedí'
+    if (editedQuestion.answers.length !== 3) {
+      newErrors.answers = 'Otázka musí mať presne 3 odpovede'
     }
 
     const correctAnswers = editedQuestion.answers.filter((a: any) => a.isCorrect)
@@ -1069,7 +1120,7 @@ function EditQuestionModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-testid="edit-question-modal">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
         <h2 className="text-xl font-bold text-gray-900 mb-4" data-testid="modal-title">
-          Upraviť otázku
+          {isNew ? 'Pridať otázku' : 'Upraviť otázku'}
         </h2>
 
         <div className="space-y-4">
@@ -1099,58 +1150,10 @@ function EditQuestionModal({
             )}
           </div>
 
-          {/* Question Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Typ otázky *
-            </label>
-            {allowedQuestionTypes.length > 1 ? (
-              <select
-                data-testid="edit-question-type"
-                value={editedQuestion.questionType}
-                onChange={(e) => setEditedQuestion({ ...editedQuestion, questionType: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {allowedQuestionTypes.includes('SINGLE_CHOICE') && (
-                  <option value="SINGLE_CHOICE">Jednovýberová</option>
-                )}
-                {allowedQuestionTypes.includes('MULTIPLE_CHOICE') && (
-                  <option value="MULTIPLE_CHOICE">Viacvýberová</option>
-                )}
-                {allowedQuestionTypes.includes('TRUE_FALSE') && (
-                  <option value="TRUE_FALSE">Pravda/Nepravda</option>
-                )}
-                {allowedQuestionTypes.includes('OPEN_ENDED') && (
-                  <option value="OPEN_ENDED">Otvorená</option>
-                )}
-              </select>
-            ) : (
-              <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-700" data-testid="edit-question-type-readonly">
-                {QUESTION_TYPE_OPTIONS.find(opt => opt.value === editedQuestion.questionType)?.label || editedQuestion.questionType}
-              </div>
-            )}
-          </div>
-
-          {/* Points */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Body *
-            </label>
-            <input
-              data-testid="edit-question-points"
-              type="number"
-              min="0.1"
-              step="0.1"
-              value={editedQuestion.points}
-              onChange={(e) => setEditedQuestion({ ...editedQuestion, points: parseFloat(e.target.value) })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
           {/* Answers */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Odpovede (2-6) *
+              Odpovede *
             </label>
             <div className="space-y-2" data-testid="answers-list">
               {editedQuestion.answers.map((answer: any, index: number) => (
@@ -1215,11 +1218,15 @@ function EditQuestionModal({
           <button
             data-testid="save-edit-button"
             onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            disabled={
+              isSaving ||
+              editedQuestion.answers.length !== 3 ||
+              editedQuestion.answers.some((a: any) => !a.text.trim())
+            }
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             type="button"
           >
-            {isSaving ? 'Ukladám...' : 'Uložiť'}
+            {isSaving ? (isNew ? 'Pridávam...' : 'Ukladám...') : (isNew ? 'Pridať' : 'Uložiť')}
           </button>
         </div>
       </div>

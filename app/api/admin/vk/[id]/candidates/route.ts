@@ -38,18 +38,7 @@ export async function POST(
       return NextResponse.json({ error: 'VK not found' }, { status: 404 })
     }
 
-    // Check permissions for ADMIN
-    if (session.user.role === 'ADMIN') {
-      const userInstitutions = await prisma.userInstitution.findMany({
-        where: { userId: session.user.id },
-        select: { institutionId: true }
-      })
-      const institutionIds = userInstitutions.map(ui => ui.institutionId)
-
-      if (!institutionIds.includes(vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-    }
+    // ADMIN can add candidates to any VK (no institution restrictions anymore)
 
     // Validate all users exist and have role UCHADZAC
     const users = await prisma.user.findMany({

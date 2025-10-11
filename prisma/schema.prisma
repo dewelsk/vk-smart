@@ -16,56 +16,11 @@ enum UserRole {
   ADMIN       // Správca rezortu, vytvára VK
   GESTOR      // Spravuje konkrétne VK
   KOMISIA     // Hodnotí uchádzačov
-  UCHADZAC    // Dočasný účet pre VK
 }
 
-// ==================== MULTI-TENANCY: REZORTY ====================
+// ==================== USER ROLES ====================
 
-// Institution (Rezort) - Organizačná jednotka (ministerstvo, úrad)
-model Institution {
-  id          String   @id @default(cuid())
-  name        String
-  code        String   @unique
-  description String?
-
-  // Allowed question types for tests in this institution
-  allowedQuestionTypes Json? @default("[\"SINGLE_CHOICE\"]")
-
-  active      Boolean  @default(true)
-
-  // Generated search columns (managed by PostgreSQL triggers, ignored by Prisma)
-  name_search        String? @ignore
-  code_search        String? @ignore
-  description_search String? @ignore
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  users       UserInstitution[]
-  userRoles   UserRoleAssignment[]
-  vks         VyberoveKonanie[]
-
-  @@map("institutions")
-}
-
-// M:N join table pre User <-> Institution
-model UserInstitution {
-  id            String   @id @default(cuid())
-
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  institutionId String
-  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-
-  assignedAt    DateTime @default(now())
-  assignedBy    String?
-
-  @@unique([userId, institutionId])
-  @@map("user_institutions")
-}
-
-// M:N join table pre User <-> Role (s možnosťou inštitucionálnej väzby)
+// M:N join table pre User <-> Role
 model UserRoleAssignment {
   id            String   @id @default(cuid())
 
@@ -74,14 +29,10 @@ model UserRoleAssignment {
 
   role          UserRole
 
-  // Optional institution binding (null = global role)
-  institutionId String?
-  institution   Institution? @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-
   assignedAt    DateTime @default(now())
   assignedBy    String?  // ID užívateľa, ktorý pridelil rolu
 
-  @@unique([userId, role, institutionId])
+  @@unique([userId, role])
   @@map("user_role_assignments")
 }
 
@@ -115,17 +66,17 @@ model User {
   updatedAt     DateTime @updatedAt
   lastLoginAt   DateTime?
 
-  institutions  UserInstitution[]
   userRoles     UserRoleAssignment[]
   createdVKs    VyberoveKonanie[]  @relation("CreatedBy")
   gestorVKs     VyberoveKonanie[]  @relation("GestorVK")
-  candidates    Candidate[]
   commissionMemberships CommissionMember[]
   evaluations   Evaluation[]
   auditLogs     AuditLog[]
   testResults   TestResult[]
   practiceTestResults PracticeTestResult[]
   securitySettingsUpdates SecuritySettings[] @relation("SecuritySettingsUpdatedBy")
+  assignedTests TestAssignment[] @relation("AssignedTests")
+  createdAssignments TestAssignment[] @relation("CreatedAssignments")
 
   @@map("users")
 }
@@ -136,15 +87,12 @@ model VyberoveKonanie {
   id                String   @id @default(cuid())
   identifier        String   @unique
 
-  institutionId     String
-  institution       Institution @relation(fields: [institutionId], references: [id])
-
   selectionType     String
   organizationalUnit String
   serviceField      String
   position          String
   serviceType       String
-  date              DateTime
+  startDateTime     DateTime
 
   numberOfPositions Int      @default(1)
 
@@ -180,39 +128,45 @@ enum VKStatus {
 // ==================== TESTY ====================
 
 model Test {
-  id            String     @id @default(cuid())
-  name          String
-  type          TestTyp
-  description   String?
+  id                   String               @id @default(cuid())
+  name                 String
+  testTypeId           String               @map("type")
+  testType             TestType             @relation(fields: [testTypeId], references: [id])
+  testTypeConditionId  String?
+  testTypeCondition    TestTypeCondition?   @relation(fields: [testTypeConditionId], references: [id])
+  description          String?
 
-  questions     Json
+  questions            Json
 
   // Allowed question types for this test (must be subset of institution's allowed types)
   allowedQuestionTypes Json? @default("[\"SINGLE_CHOICE\"]")
 
-  recommendedQuestionCount  Int?
-  recommendedDuration       Int?
-  recommendedScore          Float?
-  difficulty    Int?       @default(5)  // 1-10, kde 1 = najľahší, 10 = najnáročnejší
+  recommendedQuestionCount Int?
+  recommendedDuration      Int?
+  recommendedScore         Float?
+  difficulty               Int?    @default(5)  // 1-10, kde 1 = najľahší, 10 = najnáročnejší
 
-  approved      Boolean    @default(false)
-  approvedAt    DateTime?
+  approved             Boolean  @default(false)
+  approvedAt           DateTime?
 
-  practiceEnabled Boolean  @default(false)
+  practiceEnabled      Boolean  @default(false)
 
-  authorId      String?
+  authorId             String?
 
-  categoryId    String?
-  category      TestCategory? @relation(fields: [categoryId], references: [id])
+  categoryId           String?
+  category             TestCategory? @relation(fields: [categoryId], references: [id])
 
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  vkAssignments VKTest[]
-  testSessions  TestSession[]
-  results       TestResult[]
-  practiceResults PracticeTestResult[]
+  vkAssignments        VKTest[]
+  testSessions         TestSession[]
+  results              TestResult[]
+  practiceResults      PracticeTestResult[]
+  assignment           TestAssignment?
 
+  @@index([testTypeId])
+  @@index([testTypeConditionId])
   @@map("tests")
 }
 
@@ -222,11 +176,39 @@ model TestType {
   description String?
 
   categories  TestCategory[]
+  conditions  TestTypeCondition[]
+  tests       Test[]
+  assignments TestAssignment[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@map("test_types")
+}
+
+model TestTypeCondition {
+  id          String   @id @default(cuid())
+  testTypeId  String
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+
+  // Zakonné pravidlá testovania
+  minQuestions      Int?    // minimum počet otázok
+  maxQuestions      Int?    // maximum počet otázok
+  timeLimitMinutes  Int?    // časový limit v minútach
+  pointsPerQuestion Float?  // body za správnu odpoveď
+  minimumScore      Int?    // minimum bodov na úspech
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  testType    TestType @relation(fields: [testTypeId], references: [id], onDelete: Cascade)
+  tests       Test[]
+  assignments TestAssignment[]
+
+  @@map("test_type_conditions")
+  @@index([testTypeId, sortOrder])
 }
 
 model TestCategory {
@@ -246,15 +228,6 @@ model TestCategory {
   @@map("test_categories")
 }
 
-enum TestTyp {
-  ODBORNY
-  VSEOBECNY
-  STATNY_JAZYK
-  CUDZI_JAZYK
-  IT_ZRUCNOSTI
-  SCHOPNOSTI_VLASTNOSTI
-}
-
 model VKTest {
   id            String   @id @default(cuid())
 
@@ -265,6 +238,11 @@ model VKTest {
   test          Test     @relation(fields: [testId], references: [id])
 
   level         Int  // Sequence order (1, 2, 3, ...) not test type
+
+  // Test configuration (overrides from Test model)
+  questionCount    Int?
+  durationMinutes  Int?
+  minScore         Int?
 
   createdAt     DateTime @default(now())
 
@@ -279,31 +257,40 @@ model VKTest {
 model Candidate {
   id                String   @id @default(cuid())
 
+  // Auth
+  cisIdentifier     String   @unique  // CIS ID = login username
+  password          String?            // Hashed PIN
+
+  // Personal info
+  name              String
+  surname           String
+  email             String?
+  birthDate         DateTime?
+  phone             String?
+
+  // VK relation
   vkId              String
   vk                VyberoveKonanie @relation(fields: [vkId], references: [id], onDelete: Cascade)
 
-  userId            String
-  user              User     @relation(fields: [userId], references: [id])
-
-  cisIdentifier     String
-
-  email             String?
-
+  // Flags
+  active            Boolean  @default(true)
   isArchived        Boolean  @default(false)
-
   deleted           Boolean  @default(false)
   deletedAt         DateTime?
   deletedEmail      String?
 
+  // Timestamps
   registeredAt      DateTime @default(now())
+  lastLoginAt       DateTime?
+  updatedAt         DateTime @updatedAt
 
+  // Relations
   testSessions      TestSession[]
   testResults       TestResult[]
   documents         Document[]
   evaluations       Evaluation[]
   attachments       CandidateAttachment[]
 
-  @@unique([vkId, cisIdentifier])
   @@map("candidates")
 }
 
@@ -555,6 +542,33 @@ model SecuritySettings {
   @@map("security_settings")
 }
 
+model QuestionCategory {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  description String
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  questions   QuestionItem[]
+
+  @@map("question_categories")
+}
+
+model QuestionItem {
+  id          String   @id @default(cuid())
+  categoryId  String
+  text        String
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category    QuestionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("question_items")
+  @@index([categoryId, sortOrder])
+}
+
 model GeneratedDocument {
   id            String   @id @default(cuid())
 
@@ -613,4 +627,51 @@ enum LogSeverity {
   CRITICAL
   WARNING
   INFO
+}
+
+enum AssignmentStatus {
+  PENDING        // Gestor ešte nezačal
+  IN_PROGRESS    // Gestor rozpracoval
+  COMPLETED      // Gestor dokončil (čaká na schválenie)
+  APPROVED       // Admin schválil
+}
+
+// ==================== TEST ASSIGNMENTS ====================
+
+model TestAssignment {
+  id                  String   @id @default(cuid())
+
+  // Kto má vytvoriť test
+  assignedToUserId    String
+  assignedToUser      User     @relation("AssignedTests", fields: [assignedToUserId], references: [id])
+
+  // Admin ktorý priradil
+  createdById         String
+  createdBy           User     @relation("CreatedAssignments", fields: [createdById], references: [id])
+
+  // Aký test sa má vytvoriť
+  testTypeId          String
+  testType            TestType @relation(fields: [testTypeId], references: [id])
+
+  testTypeConditionId String
+  testTypeCondition   TestTypeCondition @relation(fields: [testTypeConditionId], references: [id])
+
+  // Popis úlohy
+  name                String
+  description         String?
+
+  // Status
+  status              AssignmentStatus @default(PENDING)
+
+  // Výsledok (keď gestor dokončí)
+  testId              String?  @unique
+  test                Test?    @relation(fields: [testId], references: [id])
+
+  createdAt           DateTime @default(now())
+  startedAt           DateTime?
+  completedAt         DateTime?
+  approvedAt          DateTime?
+  approvedById        String?
+
+  @@map("test_assignments")
 }

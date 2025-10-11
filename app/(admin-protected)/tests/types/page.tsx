@@ -1,23 +1,22 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { DataTable } from '@/components/table/DataTable'
 import { PageHeader } from '@/components/PageHeader'
-import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useTestTypes, useCreateTestType, useUpdateTestType, useDeleteTestType, type TestType } from '@/hooks/useTestTypes'
+import { useTestTypes, useCreateTestType, useDeleteTestType, type TestType } from '@/hooks/useTestTypes'
 import { toast } from 'react-hot-toast'
 
 export default function TestTypesPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [editingType, setEditingType] = useState<TestType | null>(null)
   const [deletingType, setDeletingType] = useState<TestType | null>(null)
 
   const { data, isLoading } = useTestTypes({ page, limit: pageSize })
   const createMutation = useCreateTestType()
-  const updateMutation = useUpdateTestType()
   const deleteMutation = useDeleteTestType()
 
   const testTypes = data?.testTypes ?? []
@@ -44,27 +43,6 @@ export default function TestTypesPage() {
     }
   }
 
-  const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!editingType) return
-
-    const formData = new FormData(e.currentTarget)
-    const name = formData.get('name') as string
-    const description = formData.get('description') as string
-
-    try {
-      await updateMutation.mutateAsync({
-        id: editingType.id,
-        name,
-        description: description || undefined
-      })
-      toast.success('Typ testu bol aktualizovaný')
-      setEditingType(null)
-    } catch (error: any) {
-      toast.error(error.message || 'Chyba pri aktualizácii typu testu')
-    }
-  }
-
   const handleDelete = async () => {
     if (!deletingType) return
 
@@ -82,7 +60,12 @@ export default function TestTypesPage() {
       accessorKey: 'name',
       header: 'Názov',
       cell: ({ row }) => (
-        <span className="font-medium text-gray-900">{row.original.name}</span>
+        <Link
+          href={`/tests/types/${row.original.id}`}
+          className="font-medium text-blue-600 hover:text-blue-800"
+        >
+          {row.original.name}
+        </Link>
       ),
     },
     {
@@ -93,24 +76,15 @@ export default function TestTypesPage() {
       ),
     },
     {
-      accessorKey: 'categoryCount',
-      header: 'Počet kategórií',
-      cell: ({ row }) => (
-        <span className="text-gray-900">{row.original.categoryCount}</span>
-      ),
+      accessorKey: 'conditionCount',
+      header: 'Počet podmienok',
+      cell: ({ row }) => <span className="text-gray-900">{row.original.conditionCount ?? 0}</span>,
     },
     {
       id: 'actions',
       header: 'Akcie',
       cell: ({ row }) => (
         <div className="flex gap-2">
-          <button
-            onClick={() => setEditingType(row.original)}
-            className="text-blue-600 hover:text-blue-800"
-            title="Upraviť"
-          >
-            <PencilIcon className="h-5 w-5" />
-          </button>
           <button
             onClick={() => setDeletingType(row.original)}
             className="text-red-600 hover:text-red-800"
@@ -127,7 +101,7 @@ export default function TestTypesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Typy testov"
-        description="Správa typov testov (napr. Štátny jazyk, Cudzí jazyk, IT zručnosti)"
+        description="Správa typov testov a súvisiacich podmienok."
         actions={
           <button
             onClick={() => setIsCreateModalOpen(true)}
@@ -227,61 +201,6 @@ export default function TestTypesPage() {
           </div>
         </div>
       )}
-
-      {/* Edit Modal */}
-      {editingType && (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Upraviť typ testu</h2>
-            <form onSubmit={handleUpdate}>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="edit-name" className="block text-sm font-medium text-gray-700">
-                    Názov *
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    id="edit-name"
-                    defaultValue={editingType.name}
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="edit-description" className="block text-sm font-medium text-gray-700">
-                    Popis
-                  </label>
-                  <textarea
-                    name="description"
-                    id="edit-description"
-                    defaultValue={editingType.description || ''}
-                    rows={3}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  />
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingType(null)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Zrušiť
-                </button>
-                <button
-                  type="submit"
-                  disabled={updateMutation.isPending}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {updateMutation.isPending ? 'Ukladanie...' : 'Uložiť'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Delete Confirmation Modal */}
       {deletingType && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">

@@ -1,0 +1,1 @@
+Vytváranie používateľských účtov (gestor, komisia, uchádzači) jednotlivo / CSV / Excel

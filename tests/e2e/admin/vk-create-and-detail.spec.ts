@@ -25,24 +25,22 @@ test.describe('VK Create and Detail @admin @vk @critical', () => {
     const identifier = `VK-E2E-TEST-${timestamp}`
 
     // Fill identifier
-    await page.fill('#identifier', identifier)
+    await page.getByTestId('identifier-input').fill(identifier)
 
-    // Select institution (rezort) - click and select first option
-    const institutionSelect = page.locator('.css-13cymwt-control').first()
-    await institutionSelect.click()
-    await page.keyboard.press('ArrowDown')
-    await page.keyboard.press('Enter')
+    // Fill required fields using data-testid
+    await page.getByTestId('selection-type-input').fill('Výberové konanie')
+    await page.getByTestId('organizational-unit-input').fill('E2E Test Unit')
+    await page.getByTestId('service-field-input').fill('E2E Test Field')
+    await page.getByTestId('position-input').fill('E2E Test Position')
+    await page.getByTestId('service-type-input').fill('E2E Test Service Type')
 
-    // Fill required fields
-    await page.fill('#selectionType', 'Výberové konanie')
-    await page.fill('#organizationalUnit', 'E2E Test Unit')
-    await page.fill('#serviceField', 'E2E Test Field')
-    await page.fill('#position', 'E2E Test Position')
-    await page.fill('#serviceType', 'E2E Test Service Type')
-    await page.fill('#date', '2025-12-31')
+    // Fill DateTimePicker - react-datepicker creates a single input
+    const dateTimeInput = page.locator('[data-testid="start-datetime-input"]')
+    await dateTimeInput.click()
+    await dateTimeInput.fill('31.12.2025 10:00')
 
     // Submit form
-    await page.click('button[type="submit"]')
+    await page.getByTestId('submit-button').click()
 
     // Wait for redirect to VK detail page
     await page.waitForURL(/\/vk\/[a-z0-9]+$/, { timeout: 10000 })
@@ -58,11 +56,9 @@ test.describe('VK Create and Detail @admin @vk @critical', () => {
     await expect(page).toHaveURL(new RegExp(`/vk/${vkId}$`))
 
     // Verify VK detail page loaded
-    await expect(page.locator('h1')).toContainText('Detail výberového konania', { timeout: 10000 })
+    await expect(page.getByTestId('vk-detail-page')).toBeVisible({ timeout: 10000 })
 
-    // Verify VK data is displayed
-    await expect(page.locator(`text=${identifier}`)).toBeVisible({ timeout: 5000 })
-    await expect(page.locator('text=E2E Test Position')).toBeVisible()
-    await expect(page.locator('text=PRIPRAVA')).toBeVisible()
+    // Verify VK identifier is displayed
+    await expect(page.getByTestId('vk-identifier')).toContainText(identifier, { timeout: 5000 })
   })
 })

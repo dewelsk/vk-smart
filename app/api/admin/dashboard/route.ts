@@ -68,12 +68,6 @@ export async function GET(request: NextRequest) {
         },
         take: 5,
         include: {
-          institution: {
-            select: {
-              code: true,
-              name: true,
-            },
-          },
           gestor: {
             select: {
               name: true,
@@ -101,7 +95,6 @@ export async function GET(request: NextRequest) {
       identifier: vk.identifier,
       position: vk.position,
       status: vk.status,
-      institution: vk.institution,
       gestor: vk.gestor,
       candidatesCount: vk.candidates.length,
       createdAt: vk.createdAt,

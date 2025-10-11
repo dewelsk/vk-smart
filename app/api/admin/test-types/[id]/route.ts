@@ -8,6 +8,43 @@ const updateTestTypeSchema = z.object({
   description: z.string().optional(),
 })
 
+function mapTestType(testType: {
+  id: string
+  name: string
+  description: string | null
+  createdAt: Date
+  updatedAt: Date
+  _count: { categories: number; conditions: number }
+  conditions: {
+    id: string
+    name: string
+    description: string | null
+    sortOrder: number
+    createdAt: Date
+    updatedAt: Date
+  }[]
+}) {
+  return {
+    id: testType.id,
+    name: testType.name,
+    description: testType.description,
+    categoryCount: testType._count.categories,
+    conditionCount: testType._count.conditions,
+    createdAt: testType.createdAt,
+    updatedAt: testType.updatedAt,
+    conditions: testType.conditions
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map(condition => ({
+        id: condition.id,
+        name: condition.name,
+        description: condition.description,
+        sortOrder: condition.sortOrder,
+        createdAt: condition.createdAt,
+        updatedAt: condition.updatedAt,
+      })),
+  }
+}
+
 // GET /api/admin/test-types/[id] - Get single test type
 export async function GET(
   request: NextRequest,
@@ -26,10 +63,14 @@ export async function GET(
       include: {
         _count: {
           select: {
-            categories: true
-          }
-        }
-      }
+            categories: true,
+            conditions: true,
+          },
+        },
+        conditions: {
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
+      },
     })
 
     if (!testType) {
@@ -39,14 +80,7 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({
-      id: testType.id,
-      name: testType.name,
-      description: testType.description,
-      categoryCount: testType._count.categories,
-      createdAt: testType.createdAt,
-      updatedAt: testType.updatedAt
-    })
+    return NextResponse.json(mapTestType(testType))
   } catch (error) {
     console.error('Error fetching test type:', error)
     return NextResponse.json(
@@ -111,15 +145,25 @@ export async function PATCH(
     // Build update data
     const updateData: any = {}
     if (name !== undefined) updateData.name = name
-    if (description !== undefined) updateData.description = description || null
+    if (description !== undefined) updateData.description = description ?? null
 
-    // Update test type
     const testType = await prisma.testType.update({
       where: { id: params.id },
-      data: updateData
+      data: updateData,
+      include: {
+        _count: {
+          select: {
+            categories: true,
+            conditions: true,
+          },
+        },
+        conditions: {
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
+      },
     })
 
-    return NextResponse.json(testType)
+    return NextResponse.json(mapTestType(testType))
   } catch (error) {
     console.error('Error updating test type:', error)
     return NextResponse.json(

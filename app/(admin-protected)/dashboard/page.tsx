@@ -3,6 +3,7 @@ import {
   ClipboardDocumentListIcon,
   AcademicCapIcon,
   UsersIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline'
 
 import { auth } from '@/auth'
@@ -19,19 +20,7 @@ async function getDashboardData() {
     // Build where clause based on user role
     const vkWhere: any = {}
     const candidateWhere: any = { deleted: false }
-    const userWhere: any = { deleted: false, role: { not: 'UCHADZAC' } }
-
-    // RBAC: Admin/Gestor/Komisia see only their institutions
-    if (session.user.role !== 'SUPERADMIN') {
-      const userInstitutionIds = session.user.institutions.map((i) => i.id)
-      vkWhere.institutionId = { in: userInstitutionIds }
-      candidateWhere.vk = { institutionId: { in: userInstitutionIds } }
-      userWhere.institutions = {
-        some: {
-          institutionId: { in: userInstitutionIds },
-        },
-      }
-    }
+    const userWhere: any = { deleted: false }
 
     // Get statistics
     const [
@@ -39,6 +28,7 @@ async function getDashboardData() {
       activeVKs,
       totalCandidates,
       totalUsers,
+      totalTests,
       recentVKs,
     ] = await Promise.all([
       prisma.vyberoveKonanie.count({ where: vkWhere }),
@@ -50,14 +40,12 @@ async function getDashboardData() {
       }),
       prisma.candidate.count({ where: candidateWhere }),
       prisma.user.count({ where: userWhere }),
+      prisma.test.count(),
       prisma.vyberoveKonanie.findMany({
         where: vkWhere,
         orderBy: { createdAt: 'desc' },
         take: 5,
         include: {
-          institution: {
-            select: { code: true, name: true },
-          },
           gestor: {
             select: { name: true, surname: true },
           },
@@ -74,21 +62,20 @@ async function getDashboardData() {
       identifier: vk.identifier,
       position: vk.position,
       status: vk.status,
-      institution: vk.institution,
       gestor: vk.gestor,
       candidatesCount: vk.candidates.length,
       createdAt: vk.createdAt.toISOString(),
     }))
 
     return {
-      stats: { totalVKs, activeVKs, totalCandidates, totalUsers },
+      stats: { totalVKs, activeVKs, totalCandidates, totalUsers, totalTests },
       recentVKs: formattedRecentVKs,
       statusBreakdown: {},
     }
   } catch (error) {
     console.error('Error fetching dashboard data:', error)
     return {
-      stats: { totalVKs: 0, activeVKs: 0, totalCandidates: 0, totalUsers: 0 },
+      stats: { totalVKs: 0, activeVKs: 0, totalCandidates: 0, totalUsers: 0, totalTests: 0 },
       recentVKs: [],
       statusBreakdown: {},
     }
@@ -106,9 +93,9 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Active VK Card */}
-        <Link href="/vk" data-testid="active-vk-card">
+        <Link href="/vk" data-testid="stat-vk">
           <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -117,16 +104,16 @@ export default async function AdminDashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p data-testid="active-vk-label" className="text-sm font-medium text-gray-600">Aktívne VK</p>
-                <p data-testid="active-vk-count" className="text-3xl font-bold text-gray-900">{stats.activeVKs}</p>
+                <p className="text-sm font-medium text-gray-600">Aktívne VK</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="active-vk-count">{stats.activeVKs}</p>
                 <p className="text-xs text-gray-500">z {stats.totalVKs} celkom</p>
               </div>
             </div>
           </div>
         </Link>
 
-        {/* Candidates Card */}
-        <Link href="/applicants" data-testid="candidates-card">
+        {/* Applicants Card */}
+        <Link href="/applicants" data-testid="stat-applicants">
           <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -135,15 +122,15 @@ export default async function AdminDashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p data-testid="candidates-label" className="text-sm font-medium text-gray-600">Uchádzači</p>
-                <p data-testid="candidates-count" className="text-3xl font-bold text-gray-900">{stats.totalCandidates}</p>
+                <p className="text-sm font-medium text-gray-600">Uchádzači</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="candidates-count">{stats.totalCandidates}</p>
               </div>
             </div>
           </div>
         </Link>
 
         {/* Users Card */}
-        <Link href="/users" data-testid="users-card">
+        <Link href="/users" data-testid="stat-users">
           <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
             <div className="flex items-center">
               <div className="flex-shrink-0">
@@ -152,8 +139,25 @@ export default async function AdminDashboard() {
                 </div>
               </div>
               <div className="ml-4">
-                <p data-testid="users-label" className="text-sm font-medium text-gray-600">Používatelia</p>
-                <p data-testid="users-count" className="text-3xl font-bold text-gray-900">{stats.totalUsers}</p>
+                <p className="text-sm font-medium text-gray-600">Používatelia</p>
+                <p className="text-3xl font-bold text-gray-900" data-testid="users-count">{stats.totalUsers}</p>
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        {/* Tests Card */}
+        <Link href="/tests" data-testid="stat-tests">
+          <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <DocumentTextIcon className="h-7 w-7 text-orange-600" />
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Testy</p>
+                <p className="text-3xl font-bold text-gray-900">{stats.totalTests}</p>
               </div>
             </div>
           </div>
@@ -200,7 +204,6 @@ export default async function AdminDashboard() {
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{vk.position}</p>
                       <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span>{vk.institution.code}</span>
                         {vk.gestor && <span>Gestor: {vk.gestor.name} {vk.gestor.surname}</span>}
                         <span>{vk.candidatesCount} uchádzačov</span>
                       </div>

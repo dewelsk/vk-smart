@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { TestTyp } from '@prisma/client'
 
 // GET /api/admin/tests/categories - Get list of test categories
 export async function GET(request: NextRequest) {
@@ -17,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Query params
     const search = searchParams.get('search') || undefined
-    const type = searchParams.get('type') as TestTyp | undefined
+    const typeId = searchParams.get('type') || undefined
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const sortBy = searchParams.get('sortBy') || 'createdAt'
@@ -33,8 +32,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (type) {
-      where.type = type
+    if (typeId) {
+      where.typeId = typeId
     }
 
     // Get total count
@@ -95,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, type, description } = body
+    const { name, typeId, description } = body
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -117,11 +116,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (typeId) {
+      const testTypeExists = await prisma.testType.findUnique({
+        where: { id: typeId }
+      })
+
+      if (!testTypeExists) {
+        return NextResponse.json(
+          { error: 'Zvolený typ testu neexistuje' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Create category
     const category = await prisma.testCategory.create({
       data: {
         name: name.trim(),
-        type: type || null,
+        typeId: typeId || null,
         description: description?.trim() || null
       },
       include: {

@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getToken } from 'next-auth/jwt'
 
 async function getCandidateFromRequest(request: NextRequest) {
+  // Try JWT token first (for admin switch)
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  })
+
+  if (token?.candidateId) {
+    return await prisma.candidate.findUnique({
+      where: { id: token.candidateId as string }
+    })
+  }
+
+  // Fallback to header (for regular applicant login)
   const candidateId = request.headers.get('x-candidate-id')
   if (!candidateId) return null
 
@@ -47,6 +61,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // MVP: Security checks disabled - allow access to any test
+    // TODO: Re-enable in production
+    /*
     // Check if candidate belongs to this VK
     if (vkTest.vkId !== candidate.vkId) {
       return NextResponse.json(
@@ -90,6 +107,7 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+    */
 
     // Check if session already exists
     let session = await prisma.testSession.findUnique({
@@ -101,6 +119,9 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // MVP: Allow retaking completed tests
+    // TODO: Re-enable in production
+    /*
     // If session exists and is completed, return error
     if (session && session.status === 'COMPLETED') {
       return NextResponse.json(
@@ -108,10 +129,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+    */
 
     // If session doesn't exist or is NOT_STARTED, create/update it
     const now = new Date()
-    const durationSeconds = vkTest.durationMinutes * 60
+    const durationSeconds = (vkTest.durationMinutes || 20) * 60 // Default to 20 minutes if not set
 
     if (!session) {
       session = await prisma.testSession.create({

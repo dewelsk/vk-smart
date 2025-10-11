@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation'
 import Select from 'react-select'
 import { DataTable } from '@/components/table/DataTable'
 import { RoleBadge } from '@/components/RoleBadge'
-import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { ConfirmModal } from '@/components/ConfirmModal'
+import { PlusIcon, MagnifyingGlassIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useUsers, type User } from '@/hooks/useUsers'
+import { useUsers, useDeleteUser, type User } from '@/hooks/useUsers'
 import { UserRole } from '@prisma/client'
+import { toast } from 'react-hot-toast'
 
 type RoleOption = {
   value: string
@@ -32,6 +34,10 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
+  const [deleteUserName, setDeleteUserName] = useState('')
+
+  const deleteMutation = useDeleteUser()
 
   // Debounce search input
   useEffect(() => {
@@ -59,6 +65,27 @@ export default function UsersPage() {
 
   const users = data?.users ?? []
   const pagination = data?.pagination
+
+  const handleDeleteClick = (user: User) => {
+    setDeleteUserId(user.id)
+    setDeleteUserName(`${user.name} ${user.surname}`)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteUserId) return
+
+    const toastId = toast.loading('Mažem používateľa...')
+    try {
+      await deleteMutation.mutateAsync(deleteUserId)
+      toast.dismiss(toastId)
+      toast.success('Používateľ bol úspešne vymazaný')
+      setDeleteUserId(null)
+      setDeleteUserName('')
+    } catch (error: any) {
+      toast.dismiss(toastId)
+      toast.error(error.message || 'Nepodarilo sa vymazať používateľa')
+    }
+  }
 
   // Column definitions
   const columns: ColumnDef<User>[] = [
@@ -103,16 +130,6 @@ export default function UsersPage() {
       },
     },
     {
-      id: 'institutions',
-      header: 'Rezort',
-      cell: ({ row }) => {
-        const institutions = row.original.institutions
-        if (institutions.length === 0) return <span className="text-gray-400">-</span>
-        // Show only institution code
-        return <span className="text-sm font-medium text-gray-900">{institutions[0].code}</span>
-      },
-    },
-    {
       accessorKey: 'vkCount',
       header: 'VK',
     },
@@ -138,6 +155,27 @@ export default function UsersPage() {
         )
       },
     },
+    {
+      id: 'actions',
+      header: 'Akcie',
+      cell: ({ row }) => {
+        const user = row.original
+        const canDelete = user.role !== 'SUPERADMIN'
+
+        return (
+          <button
+            onClick={() => handleDeleteClick(user)}
+            disabled={!canDelete}
+            data-testid={`delete-user-${user.id}`}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={!canDelete ? 'Superadmin nemožno vymazať' : 'Vymazať používateľa'}
+          >
+            <TrashIcon className="h-4 w-4" />
+            Vymazať
+          </button>
+        )
+      },
+    },
   ]
 
   return (
@@ -154,6 +192,7 @@ export default function UsersPage() {
         </div>
         <Link
           href="/users/new"
+          data-testid="create-user-button"
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           <PlusIcon className="h-5 w-5" />
@@ -169,6 +208,7 @@ export default function UsersPage() {
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
               type="text"
+              data-testid="search-input"
               placeholder="Hľadať..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -210,6 +250,7 @@ export default function UsersPage() {
               placeholder="Filtruj podľa role..."
               className="basic-multi-select"
               classNamePrefix="select"
+              inputId="role-filter"
               isClearable
               styles={{
                 control: (base) => ({
@@ -226,6 +267,7 @@ export default function UsersPage() {
           {/* Status filter */}
           <div>
             <select
+              data-testid="status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -245,25 +287,42 @@ export default function UsersPage() {
           <div className="text-gray-500">Načítavam...</div>
         </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={users}
-          pagination={true}
-          pageSize={pageSize}
-          pageIndex={page - 1}
-          manualPagination={true}
-          pageCount={pagination?.totalPages ?? 0}
-          totalCount={pagination?.total ?? 0}
-          onPaginationChange={(paginationState) => {
-            setPage(paginationState.pageIndex + 1)
-            if (paginationState.pageSize !== pageSize) {
-              setPageSize(paginationState.pageSize)
-              setPage(1) // Reset to page 1 when page size changes
-            }
-          }}
-          pageSizeOptions={[10, 20, 50, 100]}
-        />
+        <div data-testid="users-table">
+          <DataTable
+            columns={columns}
+            data={users}
+            pagination={true}
+            pageSize={pageSize}
+            pageIndex={page - 1}
+            manualPagination={true}
+            pageCount={pagination?.totalPages ?? 0}
+            totalCount={pagination?.total ?? 0}
+            onPaginationChange={(paginationState) => {
+              setPage(paginationState.pageIndex + 1)
+              if (paginationState.pageSize !== pageSize) {
+                setPageSize(paginationState.pageSize)
+                setPage(1) // Reset to page 1 when page size changes
+              }
+            }}
+            pageSizeOptions={[10, 20, 50, 100]}
+          />
+        </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteUserId !== null}
+        title="Vymazať používateľa"
+        message={`Naozaj chcete vymazať používateľa "${deleteUserName}"? Táto akcia je nevratná.`}
+        confirmLabel="Vymazať"
+        cancelLabel="Zrušiť"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setDeleteUserId(null)
+          setDeleteUserName('')
+        }}
+      />
     </div>
   )
 }

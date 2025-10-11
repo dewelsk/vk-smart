@@ -466,9 +466,6 @@ test.describe('Admin - Test Import', () => {
       // Change test name
       await page.getByTestId('test-name-input').fill('Test Name Change')
 
-      // Change difficulty
-      await page.getByTestId('difficulty-slider').fill('7')
-
       // Question types should still be selected
       await expect(page.getByTestId('question-type-single_choice')).toBeChecked()
       await expect(page.getByTestId('question-type-multiple_choice')).toBeChecked()

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
 
-
-// GET /api/admin/applicants/[id] - Get applicant detail
+// GET /api/admin/applicants/[id] - Get candidate detail
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -11,34 +11,39 @@ export async function GET(
   try {
     const session = await auth()
 
-    if (!session || !['SUPERADMIN', 'ADMIN', 'GESTOR', 'KOMISIA'].includes(session.user.role)) {
+    if (!session || !session.user.role || !['SUPERADMIN', 'ADMIN', 'GESTOR', 'KOMISIA'].includes(session.user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const applicant = await prisma.candidate.findUnique({
+    const candidate = await prisma.candidate.findUnique({
       where: {
         id: params.id,
         deleted: false,
       },
       include: {
-        user: {
+        vk: {
           select: {
             id: true,
-            name: true,
-            surname: true,
-            email: true,
-            username: true,
-            active: true,
-            lastLoginAt: true,
+            identifier: true,
+            position: true,
+            selectionType: true,
+            organizationalUnit: true,
+            status: true,
+            startDateTime: true,
           },
         },
-        vk: {
+        testSessions: {
           include: {
-            institution: {
+            test: {
               select: {
                 id: true,
-                code: true,
                 name: true,
+              },
+            },
+            vkTest: {
+              select: {
+                id: true,
+                level: true,
               },
             },
           },
@@ -49,31 +54,35 @@ export async function GET(
               select: {
                 id: true,
                 name: true,
+                testType: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                  },
+                },
+                testTypeCondition: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                  },
+                },
               },
             },
-          },
-        },
-        documents: {
-          select: {
-            id: true,
-            type: true,
-            filename: true,
-            uploadedAt: true,
           },
         },
         evaluations: {
           include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                surname: true,
-              },
-            },
             member: {
-              select: {
-                id: true,
-                role: true,
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    surname: true,
+                  },
+                },
               },
             },
           },
@@ -81,54 +90,138 @@ export async function GET(
       },
     })
 
-    if (!applicant) {
+    if (!candidate) {
       return NextResponse.json({ error: 'Applicant not found' }, { status: 404 })
     }
 
-    // RBAC: Check if user has access to this applicant's institution
-    if (session.user.role !== 'SUPERADMIN') {
-      const userInstitutionIds = session.user.institutions.map((i) => i.id)
-      if (!userInstitutionIds.includes(applicant.vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Get all tests assigned to this VK
+    const vkTests = await prisma.vKTest.findMany({
+      where: { vkId: candidate.vkId },
+      include: {
+        test: {
+          select: {
+            id: true,
+            name: true,
+            testType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              },
+            },
+            testTypeCondition: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { level: 'asc' },
+    })
+
+    // Build assigned tests with status
+    const assignedTests = vkTests.map((vkTest) => {
+      const session = candidate.testSessions.find(s => s.vkTestId === vkTest.id)
+
+      return {
+        vkTestId: vkTest.id,
+        level: vkTest.level,
+        test: {
+          id: vkTest.test.id,
+          name: vkTest.test.name,
+          testType: vkTest.test.testType
+            ? {
+                id: vkTest.test.testType.id,
+                name: vkTest.test.testType.name,
+                description: vkTest.test.testType.description,
+              }
+            : null,
+          testTypeCondition: vkTest.test.testTypeCondition
+            ? {
+                id: vkTest.test.testTypeCondition.id,
+                name: vkTest.test.testTypeCondition.name,
+                description: vkTest.test.testTypeCondition.description,
+              }
+            : null,
+        },
+        questionCount: vkTest.questionCount,
+        durationMinutes: vkTest.durationMinutes,
+        minScore: vkTest.minScore,
+        session: session
+          ? {
+              id: session.id,
+              status: session.status,
+              score: session.score,
+              maxScore: session.maxScore,
+              passed: session.passed,
+              startedAt: session.startedAt,
+              completedAt: session.completedAt,
+            }
+          : null,
       }
-    }
+    })
 
     // Format response
     const formattedApplicant = {
-      id: applicant.id,
-      cisIdentifier: applicant.cisIdentifier,
-      email: applicant.email,
-      isArchived: applicant.isArchived,
-      registeredAt: applicant.registeredAt,
-      user: applicant.user,
-      vk: {
-        id: applicant.vk.id,
-        identifier: applicant.vk.identifier,
-        position: applicant.vk.position,
-        selectionType: applicant.vk.selectionType,
-        organizationalUnit: applicant.vk.organizationalUnit,
-        status: applicant.vk.status,
-        date: applicant.vk.date,
-        institution: applicant.vk.institution,
-      },
-      testResults: applicant.testResults.map((tr) => ({
+      id: candidate.id,
+      name: candidate.name,
+      surname: candidate.surname,
+      cisIdentifier: candidate.cisIdentifier,
+      email: candidate.email,
+      phone: candidate.phone,
+      birthDate: candidate.birthDate,
+      active: candidate.active,
+      isArchived: candidate.isArchived,
+      registeredAt: candidate.registeredAt,
+      lastLoginAt: candidate.lastLoginAt,
+      vk: candidate.vk,
+      assignedTests,
+      testSessions: candidate.testSessions.map((ts) => ({
+        id: ts.id,
+        testId: ts.testId,
+        testName: ts.test.name,
+        status: ts.status,
+        score: ts.score,
+        maxScore: ts.maxScore,
+        passed: ts.passed,
+        startedAt: ts.startedAt,
+        completedAt: ts.completedAt,
+      })),
+      testResults: candidate.testResults.map((tr) => ({
         id: tr.id,
-        testId: tr.testId,
-        testName: tr.test.name,
+        test: {
+          id: tr.testId,
+          name: tr.test.name,
+          testType: tr.test.testType
+            ? {
+                id: tr.test.testType.id,
+                name: tr.test.testType.name,
+                description: tr.test.testType.description,
+              }
+            : null,
+          testTypeCondition: tr.test.testTypeCondition
+            ? {
+                id: tr.test.testTypeCondition.id,
+                name: tr.test.testTypeCondition.name,
+                description: tr.test.testTypeCondition.description,
+              }
+            : null,
+        },
         score: tr.score,
         maxScore: tr.maxScore,
         passed: tr.passed,
         completedAt: tr.completedAt,
       })),
-      documents: applicant.documents,
-      evaluations: applicant.evaluations.map((ev) => ({
+      evaluations: candidate.evaluations.map((ev) => ({
         id: ev.id,
         totalScore: ev.totalScore,
         maxScore: ev.maxScore,
-        successRate: ev.successRate,
         finalized: ev.finalized,
         finalizedAt: ev.finalizedAt,
-        user: ev.user,
+        member: ev.member,
         createdAt: ev.createdAt,
       })),
     }
@@ -143,61 +236,60 @@ export async function GET(
   }
 }
 
-// PUT /api/admin/applicants/[id] - Update applicant
-export async function PUT(
+// PATCH /api/admin/applicants/[id] - Update candidate
+export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const session = await auth()
 
-    if (!session || !['SUPERADMIN', 'ADMIN', 'GESTOR'].includes(session.user.role)) {
+    if (!session || !session.user.role || !['SUPERADMIN', 'ADMIN', 'GESTOR'].includes(session.user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
-    const { email, isArchived } = body
+    const {
+      name,
+      surname,
+      email,
+      phone,
+      birthDate,
+      active,
+      isArchived,
+      pin,
+    } = body
 
-    // Get existing applicant
-    const existingApplicant = await prisma.candidate.findUnique({
+    // Get existing candidate
+    const existingCandidate = await prisma.candidate.findUnique({
       where: { id: params.id, deleted: false },
-      include: {
-        vk: {
-          select: {
-            institutionId: true,
-          },
-        },
-      },
     })
 
-    if (!existingApplicant) {
+    if (!existingCandidate) {
       return NextResponse.json({ error: 'Applicant not found' }, { status: 404 })
     }
 
-    // RBAC: Check if user has access to this applicant's institution
-    if (session.user.role !== 'SUPERADMIN') {
-      const userInstitutionIds = session.user.institutions.map((i) => i.id)
-      if (!userInstitutionIds.includes(existingApplicant.vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    // Build update data
+    const updateData: any = {}
+
+    if (name !== undefined) updateData.name = name
+    if (surname !== undefined) updateData.surname = surname
+    if (email !== undefined) updateData.email = email
+    if (phone !== undefined) updateData.phone = phone
+    if (birthDate !== undefined) updateData.birthDate = birthDate ? new Date(birthDate) : null
+    if (active !== undefined) updateData.active = active
+    if (isArchived !== undefined) updateData.isArchived = isArchived
+
+    // Update PIN if provided
+    if (pin) {
+      updateData.password = await bcrypt.hash(pin, 10)
     }
 
-    // Update applicant
-    const updatedApplicant = await prisma.candidate.update({
+    // Update candidate
+    const updatedCandidate = await prisma.candidate.update({
       where: { id: params.id },
-      data: {
-        email: email !== undefined ? email : existingApplicant.email,
-        isArchived: isArchived !== undefined ? isArchived : existingApplicant.isArchived,
-      },
+      data: updateData,
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            surname: true,
-            email: true,
-          },
-        },
         vk: {
           select: {
             id: true,
@@ -210,17 +302,21 @@ export async function PUT(
 
     return NextResponse.json({
       applicant: {
-        id: updatedApplicant.id,
-        cisIdentifier: updatedApplicant.cisIdentifier,
-        email: updatedApplicant.email,
-        isArchived: updatedApplicant.isArchived,
-        registeredAt: updatedApplicant.registeredAt,
-        user: updatedApplicant.user,
-        vk: updatedApplicant.vk,
+        id: updatedCandidate.id,
+        name: updatedCandidate.name,
+        surname: updatedCandidate.surname,
+        cisIdentifier: updatedCandidate.cisIdentifier,
+        email: updatedCandidate.email,
+        phone: updatedCandidate.phone,
+        birthDate: updatedCandidate.birthDate,
+        active: updatedCandidate.active,
+        isArchived: updatedCandidate.isArchived,
+        registeredAt: updatedCandidate.registeredAt,
+        vk: updatedCandidate.vk,
       },
     })
   } catch (error) {
-    console.error('PUT /api/admin/applicants/[id] error:', error)
+    console.error('PATCH /api/admin/applicants/[id] error:', error)
     return NextResponse.json(
       { error: 'Failed to update applicant' },
       { status: 500 }
@@ -228,7 +324,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/admin/applicants/[id] - Soft delete applicant
+// DELETE /api/admin/applicants/[id] - Soft delete candidate
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -236,32 +332,17 @@ export async function DELETE(
   try {
     const session = await auth()
 
-    if (!session || !['SUPERADMIN', 'ADMIN'].includes(session.user.role)) {
+    if (!session || !session.user.role || !['SUPERADMIN', 'ADMIN'].includes(session.user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check if applicant exists
-    const applicant = await prisma.candidate.findUnique({
+    // Check if candidate exists
+    const candidate = await prisma.candidate.findUnique({
       where: { id: params.id, deleted: false },
-      include: {
-        vk: {
-          select: {
-            institutionId: true,
-          },
-        },
-      },
     })
 
-    if (!applicant) {
+    if (!candidate) {
       return NextResponse.json({ error: 'Applicant not found' }, { status: 404 })
-    }
-
-    // RBAC: Check if user has access
-    if (session.user.role !== 'SUPERADMIN') {
-      const userInstitutionIds = session.user.institutions.map((i) => i.id)
-      if (!userInstitutionIds.includes(applicant.vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
     }
 
     // Soft delete
@@ -270,7 +351,7 @@ export async function DELETE(
       data: {
         deleted: true,
         deletedAt: new Date(),
-        deletedEmail: applicant.email,
+        deletedEmail: candidate.email,
       },
     })
 

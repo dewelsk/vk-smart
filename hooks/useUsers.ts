@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 export type User = {
   id: string
@@ -12,12 +12,9 @@ export type User = {
   createdAt: string
   lastLoginAt: string | null
   passwordSetToken: string | null
-  institutions: Array<{ id: string; code: string; name: string }>
   roles: Array<{
     id: string
     role: string
-    institutionId: string | null
-    institutionName: string | null
     assignedAt: string
   }>
   vkCount: number
@@ -59,6 +56,29 @@ export function useUsers(params: UseUsersParams = {}) {
           totalPages: number
         },
       }
+    },
+  })
+}
+
+export function useDeleteUser() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to delete user')
+      }
+
+      return res.json()
+    },
+    onSuccess: () => {
+      // Invalidate all users queries to refetch the list
+      queryClient.invalidateQueries({ queryKey: ['users'] })
     },
   })
 }

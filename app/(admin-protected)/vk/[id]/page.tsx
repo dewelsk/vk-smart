@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -12,13 +13,17 @@ import {
   UserGroupIcon,
   UserPlusIcon,
   TrashIcon,
-  AcademicCapIcon
+  AcademicCapIcon,
+  ArrowDownTrayIcon,
+  PencilIcon,
+  ChatBubbleBottomCenterTextIcon,
 } from '@heroicons/react/24/outline'
 import { ValidationStatusCard } from '@/components/vk/ValidationStatusCard'
 import { AddCommissionMemberModal } from '@/components/vk/AddCommissionMemberModal'
 import { GestorSelectModal } from '@/components/vk/GestorSelectModal'
-import { AddCandidateModal } from '@/components/vk/AddCandidateModal'
+import { EditVKModal } from '@/components/vk/EditVKModal'
 import { TestsTab } from '@/components/vk/TestsTab'
+import { OralTab } from '@/components/vk/OralTab'
 import { DataTable } from '@/components/table/DataTable'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { ValidationIssue } from '@/lib/vk-validation'
@@ -28,18 +33,12 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 type VK = {
   id: string
   identifier: string
-  institutionId: string
-  institution: {
-    id: string
-    code: string
-    name: string
-  }
   selectionType: string
   organizationalUnit: string
   serviceField: string
   position: string
   serviceType: string
-  date: string
+  startDateTime: string
   numberOfPositions: number
   status: string
   gestorId: string | null
@@ -60,13 +59,9 @@ type VK = {
     id: string
     cisIdentifier: string
     isArchived: boolean
+    deleted: boolean
     email: string | null
     registeredAt: string
-    user: {
-      id: string
-      name: string
-      surname: string
-    }
   }>
   assignedTests: Array<{
     id: string
@@ -92,6 +87,10 @@ type VK = {
       }
     }>
   } | null
+  evaluationConfig: {
+    id: string
+    evaluatedTraits: string[]
+  } | null
 }
 
 type ValidationData = {
@@ -106,7 +105,7 @@ type ValidationData = {
   isReady: boolean
 }
 
-type TabType = 'overview' | 'commission' | 'candidates' | 'tests'
+type TabType = 'overview' | 'commission' | 'candidates' | 'tests' | 'oral'
 
 export default function VKDetailPage() {
   const router = useRouter()
@@ -114,16 +113,21 @@ export default function VKDetailPage() {
   const searchParams = useSearchParams()
   const vkId = params.id as string
   const { showSuccess, showError } = useToast()
+  const queryClient = useQueryClient()
 
   const [loading, setLoading] = useState(true)
   const [vk, setVK] = useState<VK | null>(null)
   const [validation, setValidation] = useState<ValidationData | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>('overview')
+  const [isDeleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isEditModalOpen, setEditModalOpen] = useState(false)
 
   // Read active tab from URL
   useEffect(() => {
     const tab = searchParams.get('tab') as TabType
-    if (tab && ['overview', 'commission', 'candidates', 'tests'].includes(tab)) {
+    if (tab && ['overview', 'commission', 'candidates', 'tests', 'oral'].includes(tab)) {
       setActiveTab(tab)
     }
   }, [searchParams])
@@ -159,9 +163,83 @@ export default function VKDetailPage() {
     }
   }
 
+  async function handleDeleteVk() {
+    if (!vk || isDeleting) {
+      return
+    }
+
+    setIsDeleting(true)
+
+    try {
+      const response = await fetch(`/api/admin/vk/${vkId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'ZRUSENE' }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        showError(data.error || 'Výberové konanie sa nepodarilo vymazať')
+        return
+      }
+
+      setDeleteModalOpen(false)
+      setLoading(true)
+      await Promise.all([fetchVK(), fetchValidation()])
+      showSuccess('Výberové konanie bolo presunuté do archívu')
+    } catch (error) {
+      console.error('Failed to delete VK:', error)
+      showError('Výberové konanie sa nepodarilo vymazať')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  async function handleExportZapisnica() {
+    if (isExporting) {
+      return
+    }
+
+    setIsExporting(true)
+
+    try {
+      const response = await fetch(`/api/admin/vk/${vkId}/export/zapisnica`, {
+        method: 'POST',
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        showError(data.error || 'Nepodarilo sa vygenerovať zápisnicu')
+        return
+      }
+
+      if (data.downloadUrl) {
+        window.open(data.downloadUrl, '_blank')
+      }
+
+      showSuccess('Zápisnica bola vygenerovaná')
+    } catch (error) {
+      console.error('Failed to export zapisnica:', error)
+      showError('Nepodarilo sa vygenerovať zápisnicu')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   function changeTab(tab: TabType) {
     setActiveTab(tab)
     router.push(`/vk/${vkId}?tab=${tab}`, { scroll: false })
+  }
+
+  async function handleVKUpdated() {
+    setLoading(true)
+    await Promise.all([fetchVK(), fetchValidation()])
+    // Invalidate VK list cache to refresh the list with updated data
+    queryClient.invalidateQueries({ queryKey: ['vks'] })
   }
 
   if (loading) {
@@ -183,21 +261,64 @@ export default function VKDetailPage() {
     )
   }
 
+  const canDeleteVk = vk.status === 'PRIPRAVA' || vk.status === 'CAKA_NA_TESTY'
+  const isArchived = vk.status === 'ZRUSENE'
+
   return (
-    <div className="space-y-6">
+    <div data-testid="vk-detail-page" className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link
-          href="/vk"
-          className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-        >
-          <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
-        </Link>
-        <div className="flex-1">
-          <h1 id="vk-detail-title" data-testid="vk-identifier" className="text-3xl font-bold text-gray-900">{vk.identifier}</h1>
-          <p className="mt-1 text-gray-600">{vk.position}</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4 sm:flex-1">
+          <Link
+            href="/vk"
+            className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+          >
+            <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
+          </Link>
+          <div>
+            <h1 id="vk-detail-title" data-testid="vk-identifier" className="text-3xl font-bold text-gray-900">{vk.identifier}</h1>
+            <p className="mt-1 text-gray-600">{vk.position}</p>
+          </div>
         </div>
-        <StatusBadge status={vk.status} />
+        <div className="flex items-center gap-3">
+          {vk.status !== 'DOKONCENE' && !isArchived && (
+            <button
+              type="button"
+              onClick={() => setEditModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-colors"
+              data-testid="edit-vk-button"
+            >
+              <PencilIcon className="h-4 w-4" />
+              Upraviť
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleExportZapisnica}
+            disabled={isExporting}
+            className={`inline-flex items-center gap-2 rounded-md border border-blue-200 px-3 py-2 text-sm font-medium shadow-sm transition-colors ${
+              isExporting
+                ? 'bg-blue-100 text-blue-400 cursor-not-allowed'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+            }`}
+            data-testid="export-zapisnica-button"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            {isExporting ? 'Generujem...' : 'Exportovať zápisnicu'}
+          </button>
+          {canDeleteVk && !isArchived && (
+            <button
+              type="button"
+              onClick={() => setDeleteModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
+              data-testid="delete-vk-button"
+            >
+              <TrashIcon className="h-4 w-4" />
+              Vymazať VK
+            </button>
+          )}
+          <StatusBadge status={vk.status} />
+        </div>
       </div>
 
       {/* Validation Status Card */}
@@ -240,7 +361,7 @@ export default function VKDetailPage() {
               `}
             >
               <UserGroupIcon className="h-5 w-5 inline-block mr-2" />
-              Komisia
+              Komisia {vk && `(${vk.commission?.members.length ?? 0})`}
             </button>
             <button
               id="candidates-tab"
@@ -254,7 +375,7 @@ export default function VKDetailPage() {
               `}
             >
               <UserPlusIcon className="h-5 w-5 inline-block mr-2" />
-              Uchádzači
+              Uchádzači {vk && `(${vk.candidates.filter(c => !c.isArchived).length})`}
             </button>
             <button
               id="tests-tab"
@@ -269,18 +390,63 @@ export default function VKDetailPage() {
               data-testid="tests-tab"
             >
               <AcademicCapIcon className="h-5 w-5 inline-block mr-2" />
-              Testy
+              Testy {vk && `(${vk.assignedTests.length})`}
+            </button>
+            <button
+              id="oral-tab"
+              onClick={() => changeTab('oral')}
+              className={`
+                py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
+                ${activeTab === 'oral'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }
+              `}
+              data-testid="oral-tab"
+            >
+              <ChatBubbleBottomCenterTextIcon className="h-5 w-5 inline-block mr-2" />
+              Ústna časť {vk?.evaluationConfig && `(${vk.evaluationConfig.evaluatedTraits.length})`}
             </button>
           </nav>
         </div>
 
         <div className="p-6">
-          {activeTab === 'overview' && <OverviewTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
-          {activeTab === 'commission' && <CommissionTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
-          {activeTab === 'candidates' && <CandidatesTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
-          {activeTab === 'tests' && <TestsTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); }} />}
+          {activeTab === 'overview' && <OverviewTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); queryClient.invalidateQueries({ queryKey: ['vks'] }); }} />}
+          {activeTab === 'commission' && <CommissionTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); queryClient.invalidateQueries({ queryKey: ['vks'] }); }} />}
+          {activeTab === 'candidates' && <CandidatesTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); queryClient.invalidateQueries({ queryKey: ['vks'] }); }} />}
+          {activeTab === 'tests' && <TestsTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); queryClient.invalidateQueries({ queryKey: ['vks'] }); }} />}
+          {activeTab === 'oral' && <OralTab vk={vk} onRefresh={() => { fetchVK(); fetchValidation(); queryClient.invalidateQueries({ queryKey: ['vks'] }); }} />}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={isDeleteModalOpen}
+        title="Vymazať výberové konanie"
+        message="Výberové konanie bude označené ako zrušené. Uchádzači prestanú byť viditeľní v zozname aktívnych uchádzačov, no všetky väzby zostanú zachované."
+        confirmLabel={isDeleting ? 'Vymazávam...' : 'Vymazať'}
+        cancelLabel="Zrušiť"
+        variant="danger"
+        onConfirm={() => {
+          if (!isDeleting) {
+            handleDeleteVk()
+          }
+        }}
+        onCancel={() => {
+          if (!isDeleting) {
+            setDeleteModalOpen(false)
+          }
+        }}
+      />
+
+      {/* Edit VK Modal */}
+      {vk && (
+        <EditVKModal
+          open={isEditModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          vk={vk}
+          onUpdated={handleVKUpdated}
+        />
+      )}
     </div>
   )
 }
@@ -325,10 +491,6 @@ function OverviewTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
             <dd className="mt-1 text-sm text-gray-900">{vk.identifier}</dd>
           </div>
           <div>
-            <dt className="text-sm font-medium text-gray-500">Rezort</dt>
-            <dd className="mt-1 text-sm text-gray-900">{vk.institution.code} - {vk.institution.name}</dd>
-          </div>
-          <div>
             <dt className="text-sm font-medium text-gray-500">Druh konania</dt>
             <dd className="mt-1 text-sm text-gray-900">{vk.selectionType}</dd>
           </div>
@@ -345,9 +507,15 @@ function OverviewTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
             <dd className="mt-1 text-sm text-gray-900">{vk.serviceType}</dd>
           </div>
           <div>
-            <dt className="text-sm font-medium text-gray-500">Dátum</dt>
+            <dt className="text-sm font-medium text-gray-500">Dátum a čas začiatku</dt>
             <dd className="mt-1 text-sm text-gray-900">
-              {new Date(vk.date).toLocaleDateString('sk-SK')}
+              {new Date(vk.startDateTime).toLocaleString('sk-SK', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
             </dd>
           </div>
           <div>
@@ -615,7 +783,7 @@ function CommissionTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
           {memberCount % 2 === 0 && (
             <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded flex items-center gap-2">
               <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
-              <span>Nepárny počet členov (aktuálne: {memberCount}) - pridajte alebo odstráňte 1 člena</span>
+              <span>Párny počet členov (aktuálne: {memberCount}) - pridajte alebo odstráňte 1 člena</span>
             </div>
           )}
           {chairmen.length === 0 && memberCount > 0 && (
@@ -694,8 +862,8 @@ type Candidate = VK['candidates'][0]
 
 function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
   const { showSuccess, showError } = useToast()
-  const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [restoring, setRestoring] = useState<string | null>(null)
   const [candidateToRemove, setCandidateToRemove] = useState<string | null>(null)
 
   async function handleRemoveConfirm() {
@@ -724,30 +892,45 @@ function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
     }
   }
 
-  const activeCandidates = vk.candidates.filter(c => !c.isArchived)
-  const archivedCandidates = vk.candidates.filter(c => c.isArchived)
+  async function handleRestore(candidateId: string) {
+    setRestoring(candidateId)
+    try {
+      const res = await fetch(`/api/admin/vk/${vk.id}/candidates/${candidateId}/restore`, {
+        method: 'POST'
+      })
 
-  const columns: ColumnDef<Candidate>[] = [
-    {
-      header: 'Meno',
-      cell: ({ row }) => (
-        <div>
-          <p className="font-medium text-gray-900">
-            {row.original.user.name} {row.original.user.surname}
-          </p>
-          {row.original.isArchived && (
-            <span className="text-xs text-gray-500">(archivovaný)</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      header: 'Email',
-      accessorFn: (row) => row.user.email || '-',
-    },
+      if (res.ok) {
+        showSuccess('Uchádzač bol úspešne obnovený')
+        onRefresh()
+      } else {
+        const data = await res.json()
+        showError(data.error || 'Chyba pri obnovovaní uchádzača')
+      }
+    } catch (error) {
+      console.error('Error restoring candidate:', error)
+      showError('Chyba pri obnovovaní uchádzača')
+    } finally {
+      setRestoring(null)
+    }
+  }
+
+  const activeCandidates = vk.candidates.filter(c => !c.deleted)
+  const deletedCandidates = vk.candidates.filter(c => c.deleted)
+
+  const activeColumns: ColumnDef<Candidate>[] = [
     {
       header: 'CIS identifikátor',
       accessorFn: (row) => row.cisIdentifier,
+    },
+    {
+      header: 'Email',
+      cell: ({ row }) => (
+        <div>
+          <p className="font-medium text-gray-900">
+            {row.original.email || '-'}
+          </p>
+        </div>
+      ),
     },
     {
       header: 'Registrovaný',
@@ -770,54 +953,91 @@ function CandidatesTab({ vk, onRefresh }: { vk: VK, onRefresh: () => void }) {
     },
   ]
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">
-          Uchádzači ({activeCandidates.length})
-          {archivedCandidates.length > 0 && ` • ${archivedCandidates.length} archivovaných`}
-        </h2>
-        <button
-          onClick={() => setAdding(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          + Pridať uchádzača
-        </button>
-      </div>
-
-      {activeCandidates.length > 0 ? (
-        <DataTable
-          columns={columns}
-          data={activeCandidates}
-          pagination={activeCandidates.length > 10}
-          pageSize={10}
-        />
-      ) : (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500 mb-4">Žiadni uchádzači</p>
+  const deletedColumns: ColumnDef<Candidate>[] = [
+    {
+      header: 'CIS identifikátor',
+      accessorFn: (row) => row.cisIdentifier,
+      cell: ({ row }) => (
+        <span className="text-gray-500">{row.original.cisIdentifier}</span>
+      ),
+    },
+    {
+      header: 'Email',
+      cell: ({ row }) => (
+        <span className="text-gray-500">{row.original.email || '-'}</span>
+      ),
+    },
+    {
+      header: 'Registrovaný',
+      cell: ({ row }) => (
+        <span className="text-gray-500">
+          {new Date(row.original.registeredAt).toLocaleDateString('sk-SK')}
+        </span>
+      ),
+    },
+    {
+      id: 'actions',
+      header: 'Akcie',
+      cell: ({ row }) => (
+        <div className="space-x-2">
           <button
-            onClick={() => setAdding(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            onClick={() => handleRestore(row.original.id)}
+            disabled={restoring === row.original.id}
+            className="text-blue-600 hover:text-blue-900 text-sm disabled:opacity-50"
           >
-            + Pridať prvého uchádzača
+            {restoring === row.original.id ? 'Obnovujem...' : 'Obnoviť'}
           </button>
         </div>
-      )}
+      ),
+    },
+  ]
 
-      {/* Add candidate modal */}
-      {adding && (
-        <AddCandidateModal
-          vkId={vk.id}
-          onClose={() => setAdding(false)}
-          onSuccess={onRefresh}
-        />
+  return (
+    <div className="space-y-6">
+      {/* Active candidates section */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Uchádzači ({activeCandidates.length})
+          </h2>
+        </div>
+
+        {activeCandidates.length > 0 ? (
+          <DataTable
+            columns={activeColumns}
+            data={activeCandidates}
+            pagination={activeCandidates.length > 10}
+            pageSize={10}
+          />
+        ) : (
+          <div className="text-center py-12 bg-gray-50 rounded-lg">
+            <p className="text-gray-500">Žiadni uchádzači</p>
+          </div>
+        )}
+      </div>
+
+      {/* Deleted candidates section */}
+      {deletedCandidates.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-md font-semibold text-gray-500 mb-4">
+            Odstránení uchádzači ({deletedCandidates.length})
+          </h3>
+          <div className="bg-gray-50 rounded-lg p-4">
+            <DataTable
+              columns={deletedColumns}
+              data={deletedCandidates}
+              pagination={deletedCandidates.length > 10}
+              pageSize={10}
+            />
+          </div>
+        </div>
       )}
 
       {/* Remove Candidate Confirmation Modal */}
       <ConfirmModal
         isOpen={!!candidateToRemove}
         title="Odstrániť uchádzača"
-        message="Naozaj chcete odstrániť tohto uchádzača? Táto akcia je nevratná."
+        message="Uchádzač bude označený ako odstránený a nebude sa zobrazovať komisii. Môžete ho neskôr obnoviť."
         confirmLabel="Odstrániť"
         cancelLabel="Zrušiť"
         variant="danger"

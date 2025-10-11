@@ -38,7 +38,24 @@ export async function POST(
     const practiceSession = await prisma.practiceTestResult.findUnique({
       where: { id: sessionId },
       include: {
-        test: true
+        test: {
+          include: {
+            testType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
+            testTypeCondition: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
+          }
+        }
       }
     })
 
@@ -179,7 +196,22 @@ export async function POST(
       test: {
         id: practiceSession.test.id,
         name: practiceSession.test.name,
-        type: practiceSession.test.type,
+        testTypeId: practiceSession.test.testTypeId,
+        testType: practiceSession.test.testType
+          ? {
+              id: practiceSession.test.testType.id,
+              name: practiceSession.test.testType.name,
+              description: practiceSession.test.testType.description,
+            }
+          : null,
+        testTypeConditionId: practiceSession.test.testTypeConditionId,
+        testTypeCondition: practiceSession.test.testTypeCondition
+          ? {
+              id: practiceSession.test.testTypeCondition.id,
+              name: practiceSession.test.testTypeCondition.name,
+              description: practiceSession.test.testTypeCondition.description,
+            }
+          : null,
         recommendedScore: practiceSession.test.recommendedScore,
       }
     })

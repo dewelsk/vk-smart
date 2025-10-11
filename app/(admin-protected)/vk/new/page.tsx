@@ -5,17 +5,7 @@ import { useRouter } from 'next/navigation'
 import Select from 'react-select'
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 import Link from 'next/link'
-
-type Institution = {
-  id: string
-  code: string
-  name: string
-}
-
-type InstitutionOption = {
-  value: string
-  label: string
-}
+import DateTimePicker from '@/components/DateTimePicker'
 
 type User = {
   id: string
@@ -32,43 +22,23 @@ type GestorOption = {
 export default function NewVKPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [institutions, setInstitutions] = useState<InstitutionOption[]>([])
   const [gestors, setGestors] = useState<GestorOption[]>([])
   const [formData, setFormData] = useState({
     identifier: '',
-    institutionId: null as InstitutionOption | null,
     selectionType: '',
     organizationalUnit: '',
     serviceField: '',
     position: '',
     serviceType: '',
-    date: '',
+    startDateTime: null as Date | null,
     numberOfPositions: 1,
     gestorId: null as GestorOption | null,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    fetchInstitutions()
     fetchGestors()
   }, [])
-
-  async function fetchInstitutions() {
-    try {
-      const res = await fetch('/api/admin/institutions')
-      const data = await res.json()
-
-      if (data.institutions) {
-        const options: InstitutionOption[] = data.institutions.map((inst: Institution) => ({
-          value: inst.id,
-          label: `${inst.code} - ${inst.name}`,
-        }))
-        setInstitutions(options)
-      }
-    } catch (error) {
-      console.error('Failed to fetch institutions:', error)
-    }
-  }
 
   async function fetchGestors() {
     try {
@@ -91,13 +61,12 @@ export default function NewVKPage() {
     const newErrors: Record<string, string> = {}
 
     if (!formData.identifier.trim()) newErrors.identifier = 'Identifikátor je povinný'
-    if (!formData.institutionId) newErrors.institutionId = 'Rezort je povinný'
     if (!formData.selectionType.trim()) newErrors.selectionType = 'Druh konania je povinný'
     if (!formData.organizationalUnit.trim()) newErrors.organizationalUnit = 'Organizačný útvar je povinný'
     if (!formData.serviceField.trim()) newErrors.serviceField = 'Odbor je povinný'
     if (!formData.position.trim()) newErrors.position = 'Pozícia je povinná'
     if (!formData.serviceType.trim()) newErrors.serviceType = 'Druh štátnej služby je povinný'
-    if (!formData.date) newErrors.date = 'Dátum je povinný'
+    if (!formData.startDateTime) newErrors.startDateTime = 'Dátum a čas začiatku je povinný'
     if (formData.numberOfPositions < 1) newErrors.numberOfPositions = 'Počet miest musí byť aspoň 1'
 
     setErrors(newErrors)
@@ -120,13 +89,12 @@ export default function NewVKPage() {
         },
         body: JSON.stringify({
           identifier: formData.identifier,
-          institutionId: formData.institutionId!.value,
           selectionType: formData.selectionType,
           organizationalUnit: formData.organizationalUnit,
           serviceField: formData.serviceField,
           position: formData.position,
           serviceType: formData.serviceType,
-          date: formData.date,
+          startDateTime: formData.startDateTime?.toISOString(),
           numberOfPositions: formData.numberOfPositions,
           gestorId: formData.gestorId?.value || null,
         }),
@@ -196,23 +164,6 @@ export default function NewVKPage() {
               }`}
             />
             {errors.identifier && <p className="mt-1 text-sm text-red-600" data-testid="identifier-error">{errors.identifier}</p>}
-          </div>
-
-          {/* Institution */}
-          <div>
-            <label htmlFor="institution" className="block text-sm font-medium text-gray-700 mb-2">
-              Rezort <span className="text-red-500">*</span>
-            </label>
-            <Select
-              value={formData.institutionId}
-              onChange={(selected) => setFormData({ ...formData, institutionId: selected })}
-              options={institutions}
-              placeholder="Vyberte rezort..."
-              className="basic-select"
-              classNamePrefix="select"
-              inputId="institution-select"
-            />
-            {errors.institutionId && <p className="mt-1 text-sm text-red-600" data-testid="institution-error">{errors.institutionId}</p>}
           </div>
 
           {/* Selection Type */}
@@ -306,22 +257,23 @@ export default function NewVKPage() {
             {errors.serviceType && <p className="mt-1 text-sm text-red-600" data-testid="service-type-error">{errors.serviceType}</p>}
           </div>
 
-          {/* Date */}
+          {/* Start DateTime */}
           <div>
-            <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
-              Dátum <span className="text-red-500">*</span>
+            <label htmlFor="startDateTime" className="block text-sm font-medium text-gray-700 mb-2">
+              Dátum a čas začiatku <span className="text-red-500">*</span>
             </label>
-            <input
-              type="date"
-              id="date"
-              data-testid="date-input"
-              value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              className={`w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${
-                errors.date ? 'border-red-500' : 'border-gray-300'
-              }`}
+            <DateTimePicker
+              value={formData.startDateTime}
+              onChange={(date) => {
+                setFormData({ ...formData, startDateTime: date })
+                if (errors.startDateTime) {
+                  setErrors({ ...errors, startDateTime: undefined })
+                }
+              }}
+              error={errors.startDateTime}
+              data-testid="start-datetime-input"
+              placeholder="Vyberte dátum a čas začiatku"
             />
-            {errors.date && <p className="mt-1 text-sm text-red-600" data-testid="date-error">{errors.date}</p>}
           </div>
 
           {/* Number of Positions */}

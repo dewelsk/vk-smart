@@ -4,16 +4,27 @@ import { prisma } from '@/lib/prisma'
 describe('Practice Test API', () => {
   let testId: string
   let testCategoryId: string
+  let testTypeId: string
   let userId: string
 
   // Setup - create test data
   beforeAll(async () => {
     await prisma.$connect()
 
-    // Create test category
+    // Create test type
+    const testType = await prisma.testType.create({
+      data: {
+        name: 'Practice Test Type ' + Date.now(),
+        description: 'Test type for practice API tests'
+      }
+    })
+    testTypeId = testType.id
+
+    // Create test category linked to the test type
     const category = await prisma.testCategory.create({
       data: {
         name: 'Practice Test Category ' + Date.now(),
+        typeId: testTypeId,
       }
     })
     testCategoryId = category.id
@@ -22,7 +33,7 @@ describe('Practice Test API', () => {
     const test = await prisma.test.create({
       data: {
         name: 'Practice Test ' + Date.now(),
-        type: 'ODBORNY',
+        testTypeId,
         categoryId: testCategoryId,
         approved: true,
         approvedAt: new Date(),
@@ -94,6 +105,9 @@ describe('Practice Test API', () => {
     }
     if (testCategoryId) {
       await prisma.testCategory.delete({ where: { id: testCategoryId } }).catch(() => {})
+    }
+    if (testTypeId) {
+      await prisma.testType.delete({ where: { id: testTypeId } }).catch(() => {})
     }
     await prisma.$disconnect()
   })
@@ -291,12 +305,12 @@ describe('Practice Test API', () => {
       const tests = await prisma.test.findMany({
         where: {
           approved: true,
-          type: 'ODBORNY'
+          testTypeId,
         }
       })
 
       tests.forEach(test => {
-        expect(test.type).toBe('ODBORNY')
+        expect(test.testTypeId).toBe(testTypeId)
       })
     })
 

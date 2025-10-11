@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Select from 'react-select'
 import { DataTable } from '@/components/table/DataTable'
-import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, MagnifyingGlassIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useApplicants, type Applicant } from '@/hooks/useApplicants'
+import { toast } from 'react-hot-toast'
+import { useRouter } from 'next/navigation'
 
 type StatusOption = {
   value: string
@@ -20,9 +22,11 @@ const statusOptions: StatusOption[] = [
 ]
 
 export default function ApplicantsPage() {
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [archivedFilter, setArchivedFilter] = useState<StatusOption>(statusOptions[1])
+  const [switchingUserId, setSwitchingUserId] = useState<string | null>(null)
 
   // Debounce search input
   useEffect(() => {
@@ -38,6 +42,39 @@ export default function ApplicantsPage() {
     search: debouncedSearch,
     archived: archivedFilter.value,
   })
+
+  // Handle switch to applicant
+  const handleSwitchToApplicant = async (userId: string, userName: string) => {
+    try {
+      setSwitchingUserId(userId)
+      toast.loading('Prepínam na uchádzača...')
+
+      const response = await fetch(`/api/admin/applicants/${userId}/switch`, {
+        method: 'POST',
+      })
+
+      toast.dismiss()
+
+      if (!response.ok) {
+        const data = await response.json()
+        toast.error(data.error || 'Chyba pri prepínaní')
+        return
+      }
+
+      const data = await response.json()
+      toast.success(data.message || `Prepnuté na ${userName}`)
+
+      // Redirect to applicant dashboard and refresh to show banner
+      router.push(data.redirectTo || '/applicant/dashboard')
+      router.refresh()
+    } catch (error) {
+      console.error('Switch error:', error)
+      toast.dismiss()
+      toast.error('Chyba pri prepínaní na uchádzača')
+    } finally {
+      setSwitchingUserId(null)
+    }
+  }
 
   // Column definitions
   const columns: ColumnDef<Applicant>[] = [
@@ -66,76 +103,37 @@ export default function ApplicantsPage() {
       id: 'vk',
       header: 'VK',
       cell: ({ row }) => {
-        const candidates = row.original.candidates
-        if (candidates.length === 0) {
-          return <span className="text-gray-400">-</span>
-        }
-        if (candidates.length === 1) {
-          return (
-            <div>
-              <Link
-                href={`/vk/${candidates[0].vk.id}`}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                {candidates[0].vk.identifier}
-              </Link>
-              <div className="text-xs text-gray-500">{candidates[0].vk.position}</div>
-            </div>
-          )
-        }
-        return (
-          <span className="text-sm font-medium text-gray-700">
-            {candidates.length} VK
-          </span>
-        )
-      },
-    },
-    {
-      id: 'institution',
-      header: 'Rezort',
-      cell: ({ row }) => {
-        const candidates = row.original.candidates
-        if (candidates.length === 0) {
-          return <span className="text-gray-400">-</span>
-        }
-        const institutions = [...new Set(candidates.map(c => c.vk.institution.code))]
-        return institutions.join(', ')
-      },
-    },
-    {
-      id: 'cisIdentifiers',
-      header: 'CIS ID',
-      cell: ({ row }) => {
-        const candidates = row.original.candidates
-        if (candidates.length === 0) {
+        const applicant = row.original
+        if (!applicant.vk) {
           return <span className="text-gray-400">-</span>
         }
         return (
-          <div className="text-sm">
-            {candidates.map((c, idx) => (
-              <div key={c.id} className={idx > 0 ? 'mt-1' : ''}>
-                {c.cisIdentifier}
-              </div>
-            ))}
+          <div>
+            <Link
+              href={`/vk/${applicant.vk.id}`}
+              className="text-blue-600 hover:text-blue-800"
+            >
+              {applicant.vk.identifier}
+            </Link>
+            <div className="text-xs text-gray-500">{applicant.vk.position}</div>
           </div>
         )
       },
     },
     {
-      id: 'testResultsCount',
-      header: 'Testy',
-      cell: ({ row }) => {
-        const total = row.original.candidates.reduce((sum, c) => sum + c.testResultsCount, 0)
-        return total || '-'
-      },
+      accessorKey: 'cisIdentifier',
+      header: 'CIS ID',
+      cell: ({ row }) => row.original.cisIdentifier || '-',
     },
     {
-      id: 'evaluationsCount',
+      accessorKey: 'testResultsCount',
+      header: 'Testy',
+      cell: ({ row }) => row.original.testResultsCount || '-',
+    },
+    {
+      accessorKey: 'evaluationsCount',
       header: 'Hodnotenia',
-      cell: ({ row }) => {
-        const total = row.original.candidates.reduce((sum, c) => sum + c.evaluationsCount, 0)
-        return total || '-'
-      },
+      cell: ({ row }) => row.original.evaluationsCount || '-',
     },
     {
       accessorKey: 'createdAt',
@@ -155,6 +153,39 @@ export default function ApplicantsPage() {
             Neaktívny
           </span>
         ),
+    },
+    {
+      id: 'actions',
+      header: 'Akcie',
+      cell: ({ row }) => {
+        const user = row.original
+        const userName = `${user.name} ${user.surname}`
+        const isSwitching = switchingUserId === user.id
+
+        return (
+          <button
+            onClick={() => handleSwitchToApplicant(user.id, userName)}
+            disabled={isSwitching || !user.active}
+            data-testid={`switch-button-${user.id}`}
+            className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+          >
+            {isSwitching ? (
+              <>
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Prepínam...
+              </>
+            ) : (
+              <>
+                <ArrowRightOnRectangleIcon className="h-4 w-4" />
+                Prepnúť
+              </>
+            )}
+          </button>
+        )
+      },
     },
   ]
 

@@ -28,6 +28,20 @@ export async function POST(request: NextRequest) {
     const test = await prisma.test.findUnique({
       where: { id: testId },
       include: {
+        testType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
+        testTypeCondition: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
         category: {
           select: { id: true, name: true }
         }
@@ -90,7 +104,22 @@ export async function POST(request: NextRequest) {
       test: {
         id: test.id,
         name: test.name,
-        type: test.type,
+        testTypeId: test.testTypeId,
+        testType: test.testType
+          ? {
+              id: test.testType.id,
+              name: test.testType.name,
+              description: test.testType.description,
+            }
+          : null,
+        testTypeConditionId: test.testTypeConditionId,
+        testTypeCondition: test.testTypeCondition
+          ? {
+              id: test.testTypeCondition.id,
+              name: test.testTypeCondition.name,
+              description: test.testTypeCondition.description,
+            }
+          : null,
         description: test.description,
         category: test.category,
         questions: transformedQuestions,

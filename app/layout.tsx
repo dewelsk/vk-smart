@@ -8,6 +8,7 @@ import { SessionProvider } from '@/components/providers/SessionProvider'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { ToastProvider } from '@/components/Toast'
 import { BackendErrorMonitor } from '@/components/BackendErrorMonitor'
+import SwitchedUserBannerWrapper from '@/components/SwitchedUserBannerWrapper'
 
 // DebugBar must be client-only (uses usePathname, useRouter)
 const DebugBar = dynamic(() => import('@/components/dev/DebugBar').then(mod => ({ default: mod.DebugBar })), {
@@ -37,6 +38,7 @@ export default function RootLayout({
           <ToastProvider>
             <Toaster position="top-right" />
             <BackendErrorMonitor />
+            <SwitchedUserBannerWrapper />
             <SessionProvider>
               <QueryProvider>
                 {children}

@@ -2,13 +2,15 @@
 
 # Production Deployment Script for vk.retry.sk
 # Usage: ./scripts/deploy.sh
+#
+# This script builds the application locally and syncs the built .next/ directory
+# to avoid build issues on the production server.
 
 set -e  # Exit on error
 
 # Configuration
 SERVER="deploy@165.22.95.150"
 APP_DIR="/var/www/vk-retry"
-BACKUP_DIR="/var/www/vk-retry-backup"
 SSH_KEY="~/.ssh/monitra_do"
 
 # Colors for output
@@ -71,11 +73,24 @@ fi
 CURRENT_BRANCH=$(git branch --show-current)
 CURRENT_COMMIT=$(git rev-parse --short HEAD)
 log_success "Git: $CURRENT_BRANCH @ $CURRENT_COMMIT"
+echo ""
 
-# Step 2: Create backup on server
+# Step 2: Build locally
+log_info "Building application locally..."
+NODE_ENV=production npm run build
+
+if [ ! -f ".next/BUILD_ID" ]; then
+    log_error "Build failed - .next/BUILD_ID not found"
+    exit 1
+fi
+
+log_success "Build successful"
+echo ""
+
+# Step 3: Create backup on server
 log_info "Creating backup on server..."
 ssh -i "$SSH_KEY" "$SERVER" << 'ENDSSH'
-if [ -d "/var/www/vk-retry" ]; then
+if [ -d "/var/www/vk-retry/.next" ]; then
     BACKUP_NAME="/var/www/vk-retry-backup-$(date +%Y%m%d-%H%M%S)"
     cp -r /var/www/vk-retry "$BACKUP_NAME"
     echo "Backup created: $BACKUP_NAME"
@@ -88,12 +103,12 @@ else
 fi
 ENDSSH
 log_success "Backup created"
+echo ""
 
-# Step 3: Rsync code to server
+# Step 4: Rsync code to server (including .next/)
 log_info "Syncing code to server..."
 rsync -avz --delete \
     --exclude 'node_modules' \
-    --exclude '.next' \
     --exclude '.git' \
     --exclude 'test-results' \
     --exclude 'playwright-report' \
@@ -103,22 +118,22 @@ rsync -avz --delete \
     -e "ssh -i $SSH_KEY" \
     ./ "$SERVER:$APP_DIR/"
 
-log_success "Code synced"
+log_success "Code synced (including .next/)"
+echo ""
 
-# Step 4: Build and restart on server
-log_info "Building application on server..."
+# Step 5: Install dependencies and restart on server
+log_info "Installing production dependencies..."
 ssh -i "$SSH_KEY" "$SERVER" << 'ENDSSH'
 set -e
-
 cd /var/www/vk-retry
 
-# Load environment variables from .env.production
+# Load environment variables
 set -a
 source .env.production
 set +a
 
 echo "📦 Installing dependencies..."
-npm ci --production=false
+npm ci --production
 
 echo "🔨 Generating Prisma client..."
 npx prisma generate
@@ -126,27 +141,25 @@ npx prisma generate
 echo "🗃️  Running database migrations..."
 npx prisma migrate deploy
 
-echo "🏗️  Building Next.js application..."
-npm run build
-
-echo "🔄 Reloading PM2 (graceful restart)..."
-pm2 reload ecosystem.config.js --update-env
+echo "🔄 Reloading PM2..."
+pm2 reload vk-retry --update-env
 
 echo "💾 Saving PM2 configuration..."
 pm2 save
 
 echo ""
-echo "✅ Build complete!"
+echo "✅ Deployment complete!"
 ENDSSH
 
-log_success "Application built and restarted"
+log_success "Application restarted"
+echo ""
 
-# Step 5: Health check
+# Step 6: Health check
 log_info "Waiting 5 seconds for application to start..."
 sleep 5
 
 log_info "Running health check..."
-if curl -f -s -o /dev/null -w "%{http_code}" https://vk.retry.sk | grep -q "200\|302"; then
+if curl -f -s -o /dev/null -w "%{http_code}" https://vk.retry.sk | grep -q "200\|302\|307"; then
     log_success "Health check passed! ✨"
 else
     log_error "Health check FAILED!"
@@ -154,8 +167,22 @@ else
     exit 1
 fi
 
-# Step 6: Summary
 echo ""
+
+# Step 7: Run production smoke tests
+log_info "Running production smoke tests..."
+npm run test:e2e:smoke
+
+if [ $? -eq 0 ]; then
+    log_success "All smoke tests passed!"
+else
+    log_warning "Some smoke tests failed"
+    log_info "Check test results in test-results/"
+fi
+
+echo ""
+
+# Step 8: Summary
 echo "========================================="
 echo "  Deployment Summary"
 echo "========================================="

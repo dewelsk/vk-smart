@@ -23,7 +23,8 @@ const questionSchema = z.object({
 const updateTestSchema = z.object({
   name: z.string().min(1, 'Názov testu je povinný').optional(),
   description: z.string().nullish(),
-  difficulty: z.number().min(1).max(10).optional(),
+  testTypeId: z.string().min(1, 'Typ testu je povinný').optional(),
+  testTypeConditionId: z.string().min(1).optional().nullable(),
   recommendedDuration: z.number().min(1).optional(),
   recommendedQuestionCount: z.number().min(1).optional(),
   recommendedScore: z.number().min(0).optional(),
@@ -52,6 +53,20 @@ export async function GET(
     const test = await prisma.test.findUnique({
       where: { id: testId },
       include: {
+        testType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
+        testTypeCondition: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          },
+        },
         category: {
           select: {
             id: true,
@@ -110,7 +125,22 @@ export async function GET(
       test: {
         id: test.id,
         name: test.name,
-        type: test.type,
+        testTypeId: test.testTypeId,
+        testType: test.testType
+          ? {
+              id: test.testType.id,
+              name: test.testType.name,
+              description: test.testType.description,
+            }
+          : null,
+        testTypeConditionId: test.testTypeConditionId,
+        testTypeCondition: test.testTypeCondition
+          ? {
+              id: test.testTypeCondition.id,
+              name: test.testTypeCondition.name,
+              description: test.testTypeCondition.description,
+            }
+          : null,
         description: test.description,
         questions: test.questions,
         questionCount: questions.length,
@@ -183,14 +213,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Nemáte oprávnenie upravovať tento test' }, { status: 403 })
     }
 
+    // MVP: Allow editing tests even if used in active VK
+    // TODO: In production, may want to restrict this
     // Check if test is being used in active VK
-    const hasActiveUsage = existingTest.vkAssignments.some(a => a.vk.status === 'TESTOVANIE')
-    if (hasActiveUsage && session.user.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { error: 'Test sa používa v aktívnom výberovom konaní a nemožno ho upravovať' },
-        { status: 400 }
-      )
-    }
+    // const hasActiveUsage = existingTest.vkAssignments.some(a => a.vk.status === 'TESTOVANIE')
+    // if (hasActiveUsage && session.user.role !== 'SUPERADMIN') {
+    //   return NextResponse.json(
+    //     { error: 'Test sa používa v aktívnom výberovom konaní a nemožno ho upravovať' },
+    //     { status: 400 }
+    //   )
+    // }
 
     const body = await request.json()
 
@@ -204,6 +236,39 @@ export async function PATCH(
     }
 
     const data = validationResult.data
+
+    const hasConditionField = Object.prototype.hasOwnProperty.call(data, 'testTypeConditionId')
+    const targetTestTypeId = data.testTypeId ?? existingTest.testTypeId
+    const targetConditionId = hasConditionField
+      ? data.testTypeConditionId ?? null
+      : data.testTypeId
+        ? null
+        : existingTest.testTypeConditionId
+
+    const testTypeRecord = await prisma.testType.findUnique({
+      where: { id: targetTestTypeId }
+    })
+
+    if (!testTypeRecord) {
+      return NextResponse.json({ error: 'Zvolený typ testu neexistuje' }, { status: 400 })
+    }
+
+    if (targetConditionId) {
+      const conditionRecord = await prisma.testTypeCondition.findUnique({
+        where: { id: targetConditionId }
+      })
+
+      if (!conditionRecord) {
+        return NextResponse.json({ error: 'Zvolená podmienka testu neexistuje' }, { status: 400 })
+      }
+
+      if (conditionRecord.testTypeId !== targetTestTypeId) {
+        return NextResponse.json(
+          { error: 'Zvolená podmienka nepatrí k danému typu testu' },
+          { status: 400 }
+        )
+      }
+    }
 
     // Validate allowedQuestionTypes if provided
     if (data.allowedQuestionTypes) {
@@ -268,10 +333,13 @@ export async function PATCH(
       data: {
         ...(data.name && { name: data.name }),
         ...(data.description !== undefined && { description: data.description || null }),
-        ...(data.difficulty && { difficulty: data.difficulty }),
-        ...(data.recommendedDuration && { recommendedDuration: data.recommendedDuration }),
-        ...(data.recommendedQuestionCount && { recommendedQuestionCount: data.recommendedQuestionCount }),
+        ...(data.recommendedDuration !== undefined && { recommendedDuration: data.recommendedDuration }),
+        ...(data.recommendedQuestionCount !== undefined && { recommendedQuestionCount: data.recommendedQuestionCount }),
         ...(data.recommendedScore !== undefined && { recommendedScore: data.recommendedScore }),
+        ...(data.testTypeId && { testTypeId: data.testTypeId }),
+        ...((data.testTypeId !== undefined || hasConditionField) && {
+          testTypeConditionId: targetConditionId,
+        }),
         ...(data.approved !== undefined && { approved: data.approved, approvedAt: data.approved ? new Date() : null }),
         ...(data.practiceEnabled !== undefined && { practiceEnabled: data.practiceEnabled }),
         ...(data.categoryId && { categoryId: data.categoryId }),
@@ -279,12 +347,44 @@ export async function PATCH(
         ...(data.questions && { questions: data.questions }),
       },
       include: {
+        testType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
+        testTypeCondition: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
         category: {
           select: {
             id: true,
             name: true
           }
         }
+      }
+    })
+
+    // Update all VKTest records that use this test
+    // (update questionCount, durationMinutes, minScore from updated test)
+    const questions = (updatedTest.questions as any[]) || []
+    const totalQuestions = questions.length
+    const questionCount = updatedTest.recommendedQuestionCount || totalQuestions
+    const durationMinutes = updatedTest.recommendedDuration || 30
+    const scorePerQuestion = 1
+    const minScore = updatedTest.recommendedScore || (questionCount * scorePerQuestion * 0.6)
+
+    await prisma.vKTest.updateMany({
+      where: { testId },
+      data: {
+        questionCount,
+        durationMinutes,
+        minScore: Math.round(minScore)
       }
     })
 
@@ -351,9 +451,32 @@ export async function DELETE(
       )
     }
 
-    // Delete test
-    await prisma.test.delete({
-      where: { id: testId }
+    // Delete test and all related records using transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete practice test results
+      await tx.practiceTestResult.deleteMany({
+        where: { testId }
+      })
+
+      // Delete test results
+      await tx.testResult.deleteMany({
+        where: { testId }
+      })
+
+      // Delete test sessions
+      await tx.testSession.deleteMany({
+        where: { testId }
+      })
+
+      // Delete VK test assignments (only if not in active VKs)
+      await tx.vKTest.deleteMany({
+        where: { testId }
+      })
+
+      // Finally delete the test
+      await tx.test.delete({
+        where: { id: testId }
+      })
     })
 
     return NextResponse.json({

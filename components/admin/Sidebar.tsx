@@ -9,12 +9,12 @@ import {
   UsersIcon,
   AcademicCapIcon,
   DocumentTextIcon,
-  BuildingOfficeIcon,
   Bars3Icon,
   XMarkIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   Cog6ToothIcon,
+  ArchiveBoxIcon,
 } from '@heroicons/react/24/outline'
 import type { Session } from 'next-auth'
 
@@ -37,7 +37,6 @@ export default function Sidebar({ session }: SidebarProps) {
 
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: ChartBarIcon, roles: ['SUPERADMIN', 'ADMIN'] },
-    { name: 'Rezorty', href: '/institutions', icon: BuildingOfficeIcon, roles: ['SUPERADMIN'] },
     { name: 'Výberové konania', href: '/vk', icon: ClipboardDocumentListIcon, roles: ['SUPERADMIN', 'ADMIN'] },
     { name: 'Používatelia', href: '/users', icon: UsersIcon, roles: ['SUPERADMIN', 'ADMIN'] },
     { name: 'Uchádzači', href: '/applicants', icon: AcademicCapIcon, roles: ['SUPERADMIN', 'ADMIN'] },
@@ -49,17 +48,28 @@ export default function Sidebar({ session }: SidebarProps) {
         { name: 'Zoznam testov', href: '/tests' },
         { name: 'Import testov', href: '/tests/import' },
         { name: 'Typy testov', href: '/tests/types' },
-        { name: 'Kategórie testov', href: '/tests/categories' },
+        { name: 'Bateria otázok', href: '/questions/battery' },
         { name: 'Precvičovanie', href: '/tests/practice' },
       ]
+    },
+    {
+      name: 'Archív',
+      icon: ArchiveBoxIcon,
+      roles: ['SUPERADMIN', 'ADMIN'],
+      children: [
+        { name: 'Výberové konania', href: '/archive/vk' },
+        { name: 'Uchádzači', href: '/archive/applicants' },
+      ],
     },
     { name: 'Nastavenia', href: '/settings', icon: Cog6ToothIcon, roles: ['SUPERADMIN'] },
   ]
 
-  // Filter navigation based on user role
-  const filteredNavigation = navigation.filter(item =>
-    item.roles.includes(session.user.role)
-  )
+  // Filter navigation based on user roles
+  const filteredNavigation = navigation.filter(item => {
+    // Check if user has any of the required roles
+    const userRoles = session.user.roles?.map(r => r.role) || []
+    return item.roles.some(role => userRoles.includes(role))
+  })
 
   // Auto-expand parent items if child is active
   const isChildActive = (children?: { name: string; href: string }[]) => {

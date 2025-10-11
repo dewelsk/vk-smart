@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
     // Filters
     const search = searchParams.get('search') || ''
     const roles = searchParams.get('roles')?.split(',').filter(Boolean) || []
-    const institutionId = searchParams.get('institutionId') || ''
     const status = searchParams.get('status') || 'all' // all, active, inactive, pending
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
@@ -34,32 +33,11 @@ export async function GET(request: NextRequest) {
       deleted: false,
     }
 
-    // RBAC: Admin sees only users from their institutions
-    if (session.user.role === 'ADMIN') {
-      const userInstitutionIds = session.user.institutions.map(i => i.id)
-      where.institutions = {
-        some: {
-          institutionId: {
-            in: userInstitutionIds,
-          },
-        },
-      }
-    }
-
     // Role filter
     if (roles.length > 0) {
       where.role = {
         in: roles as UserRole[],
         not: UserRole.UCHADZAC,
-      }
-    }
-
-    // Institution filter (only for superadmin)
-    if (institutionId && session.user.role === 'SUPERADMIN') {
-      where.institutions = {
-        some: {
-          institutionId,
-        },
       }
     }
 
@@ -105,16 +83,7 @@ export async function GET(request: NextRequest) {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          institutions: {
-            include: {
-              institution: true,
-            },
-          },
-          userRoles: {
-            include: {
-              institution: true,
-            },
-          },
+          userRoles: true,
           gestorVKs: {
             select: { id: true },
           },
@@ -136,16 +105,9 @@ export async function GET(request: NextRequest) {
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
       passwordSetToken: user.passwordSetToken,
-      institutions: user.institutions.map((ui) => ({
-        id: ui.institution.id,
-        code: ui.institution.code,
-        name: ui.institution.name,
-      })),
       roles: user.userRoles.map((ur) => ({
         id: ur.id,
         role: ur.role,
-        institutionId: ur.institutionId,
-        institutionName: ur.institution?.name || null,
         assignedAt: ur.assignedAt,
       })),
       vkCount: user.gestorVKs.length,
@@ -179,7 +141,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, surname, username, email, role, note, institutionIds } = body
+    const { name, surname, username, email, role, note } = body
 
     // Validation
     if (!name || !surname || !username || !role) {
@@ -242,17 +204,6 @@ export async function POST(request: NextRequest) {
         active: true,
       },
     })
-
-    // Assign institutions
-    if (institutionIds && institutionIds.length > 0) {
-      await prisma.userInstitution.createMany({
-        data: institutionIds.map((institutionId: string) => ({
-          userId: user.id,
-          institutionId,
-          assignedBy: session.user.id,
-        })),
-      })
-    }
 
     // TODO: Send email with password set link
     // For now, just return the token in response (MVP)

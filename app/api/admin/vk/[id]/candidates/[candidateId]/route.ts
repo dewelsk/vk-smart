@@ -35,18 +35,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Candidate does not belong to this VK' }, { status: 400 })
     }
 
-    // Check permissions for ADMIN
-    if (session.user.role === 'ADMIN') {
-      const userInstitutions = await prisma.userInstitution.findMany({
-        where: { userId: session.user.id },
-        select: { institutionId: true }
-      })
-      const institutionIds = userInstitutions.map(ui => ui.institutionId)
-
-      if (!institutionIds.includes(candidate.vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-    }
+    // ADMIN can remove candidates from any VK (no institution restrictions anymore)
 
     // Soft delete the candidate
     await prisma.candidate.update({

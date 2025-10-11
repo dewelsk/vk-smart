@@ -8,15 +8,10 @@ export type VK = {
   organizationalUnit: string
   serviceField: string
   serviceType: string
-  date: string
+  startDateTime: string
   numberOfPositions: number
   status: string
   createdAt: string
-  institution: {
-    id: string
-    code: string
-    name: string
-  }
   gestor: {
     id: string
     name: string
@@ -28,6 +23,8 @@ export type VK = {
     status: 'ready' | 'warning' | 'error'
     count: number
     label: string
+    errors: string[]
+    warnings: string[]
   }
 }
 

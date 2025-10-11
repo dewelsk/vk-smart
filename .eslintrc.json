@@ -1,0 +1,11 @@
+{
+  "extends": ["next", "next/core-web-vitals"],
+  "ignorePatterns": [
+    ".next/**/*",
+    "node_modules/**/*",
+    "storage/**/*",
+    "playwright-report/**/*",
+    "test-results/**/*",
+    "prisma/migrations/**/*"
+  ]
+}

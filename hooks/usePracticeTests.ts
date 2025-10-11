@@ -3,13 +3,23 @@ import { useQuery } from '@tanstack/react-query'
 export type PracticeTest = {
   id: string
   name: string
-  type: string
+  testTypeId: string
+  testType: {
+    id: string
+    name: string
+    description: string | null
+  } | null
+  testTypeConditionId: string | null
+  testTypeCondition: {
+    id: string
+    name: string
+    description: string | null
+  } | null
   description: string | null
   category: {
     id: string
     name: string
   } | null
-  difficulty: number | null
   questionCount: number
   recommendedQuestionCount: number | null
   recommendedDuration: number | null
@@ -24,7 +34,7 @@ export type PracticeTest = {
 
 export type PracticeTestsParams = {
   search?: string
-  type?: string
+  testTypeId?: string
   categoryId?: string
 }
 
@@ -37,8 +47,8 @@ export function usePracticeTests(params: PracticeTestsParams = {}) {
       if (params.search) {
         searchParams.set('search', params.search)
       }
-      if (params.type) {
-        searchParams.set('type', params.type)
+      if (params.testTypeId) {
+        searchParams.set('type', params.testTypeId)
       }
       if (params.categoryId) {
         searchParams.set('categoryId', params.categoryId)
@@ -62,7 +72,12 @@ export type PracticeHistoryResult = {
   test: {
     id: string
     name: string
-    type: string
+    testTypeId: string
+    testType: {
+      id: string
+      name: string
+      description: string | null
+    } | null
     category: {
       id: string
       name: string

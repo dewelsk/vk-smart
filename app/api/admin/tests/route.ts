@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { TestTyp } from '@prisma/client'
 
 // GET /api/admin/tests - Get list of tests
 export async function GET(request: NextRequest) {
@@ -17,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Query params
     const search = searchParams.get('search') || undefined
-    const type = searchParams.get('type') as TestTyp | undefined
+    const testTypeId = searchParams.get('type') || undefined
     const approved = searchParams.get('approved') === 'true' ? true : searchParams.get('approved') === 'false' ? false : undefined
     const authorId = searchParams.get('authorId') || undefined
     const categoryId = searchParams.get('categoryId') || undefined
@@ -42,8 +41,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (type) {
-      where.type = type
+    if (testTypeId) {
+      where.type = testTypeId
     }
 
     if (approved !== undefined) {
@@ -72,7 +71,8 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         name: true,
-        type: true,
+        testTypeId: true,
+        testTypeConditionId: true,
         description: true,
         questions: true,
         allowedQuestionTypes: true,
@@ -86,6 +86,20 @@ export async function GET(request: NextRequest) {
         categoryId: true,
         createdAt: true,
         updatedAt: true,
+        testType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
+        testTypeCondition: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+          }
+        },
         category: {
           select: {
             id: true,
@@ -130,7 +144,22 @@ export async function GET(request: NextRequest) {
       return {
         id: test.id,
         name: test.name,
-        type: test.type,
+        testTypeId: test.testTypeId,
+        testType: test.testType
+          ? {
+              id: test.testType.id,
+              name: test.testType.name,
+              description: test.testType.description,
+            }
+          : null,
+        testTypeConditionId: test.testTypeConditionId,
+        testTypeCondition: test.testTypeCondition
+          ? {
+              id: test.testTypeCondition.id,
+              name: test.testTypeCondition.name,
+              description: test.testTypeCondition.description,
+            }
+          : null,
         description: test.description,
         questionCount: questions.length,
         allowedQuestionTypes: test.allowedQuestionTypes,

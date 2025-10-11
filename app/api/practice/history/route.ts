@@ -40,7 +40,14 @@ export async function GET(request: NextRequest) {
             select: {
               id: true,
               name: true,
-              type: true,
+              testTypeId: true,
+              testType: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                }
+              },
               category: {
                 select: {
                   id: true,

@@ -40,7 +40,9 @@ test.describe('Applicants Detail @admin @applicants', () => {
   test('should display tabs', async ({ page }) => {
     await expect(page.getByTestId('tabs-container')).toBeVisible()
     await expect(page.getByTestId('overview-tab')).toBeVisible()
-    await expect(page.getByTestId('vk-tab')).toBeVisible()
+    await expect(page.getByTestId('tests-tab')).toBeVisible()
+    await expect(page.getByTestId('evaluations-tab')).toBeVisible()
+    await expect(page.getByTestId('files-tab')).toBeVisible()
   })
 
   test('should display overview tab by default', async ({ page }) => {
@@ -60,37 +62,41 @@ test.describe('Applicants Detail @admin @applicants', () => {
     await expect(page.getByTestId('overview-content')).toBeVisible()
     await expect(page.getByTestId('field-name')).toBeVisible()
     await expect(page.getByTestId('field-surname')).toBeVisible()
+    await expect(page.getByTestId('field-cis-identifier')).toBeVisible()
     await expect(page.getByTestId('field-email')).toBeVisible()
-    await expect(page.getByTestId('field-username')).toBeVisible()
-    await expect(page.getByTestId('field-role')).toBeVisible()
+    await expect(page.getByTestId('field-phone')).toBeVisible()
     await expect(page.getByTestId('field-status')).toBeVisible()
   })
 
-  test('should display creation and update dates', async ({ page }) => {
-    await expect(page.getByTestId('field-created')).toBeVisible()
-    await expect(page.getByTestId('field-updated')).toBeVisible()
+  test('should display registration and login dates', async ({ page }) => {
+    await expect(page.getByTestId('field-registered')).toBeVisible()
+    await expect(page.getByTestId('field-last-login')).toBeVisible()
   })
 
-  test('should switch to VK tab', async ({ page }) => {
-    const vkTab = page.getByTestId('vk-tab')
-    await vkTab.click()
+  test('should display VK information in overview', async ({ page }) => {
+    // VK link should be visible in header
+    const vkLink = page.getByTestId('vk-link')
+    const hasVkLink = await vkLink.isVisible().catch(() => false)
 
-    // VK tab should be active
-    await expect(vkTab).toHaveClass(/border-blue-500/)
-
-    // VK content should be visible
-    await expect(page.getByTestId('vk-content')).toBeVisible()
+    if (hasVkLink) {
+      // If VK link exists, VK fields should be visible in overview
+      await expect(page.getByTestId('field-vk-identifier')).toBeVisible()
+      await expect(page.getByTestId('field-vk-position')).toBeVisible()
+      await expect(page.getByTestId('field-vk-status')).toBeVisible()
+    }
   })
 
-  test('should display VK content or empty message in VK tab', async ({ page }) => {
-    await page.getByTestId('vk-tab').click()
+  test('should display files tab with data or empty state', async ({ page }) => {
+    await page.getByTestId('files-tab').click()
 
-    // Should either see table or empty message
-    const hasTable = await page.getByTestId('vk-table').isVisible().catch(() => false)
-    const hasEmptyMessage = await page.getByTestId('vk-empty-message').isVisible().catch(() => false)
+    await expect(page.getByTestId('files-tab')).toHaveClass(/border-blue-500/)
+    await expect(page.getByTestId('files-content')).toBeVisible()
 
-    // One of them should be visible
-    expect(hasTable || hasEmptyMessage).toBeTruthy()
+    const hasTable = await page.getByTestId('files-table').isVisible().catch(() => false)
+    const hasEmpty = await page.getByTestId('files-empty').isVisible().catch(() => false)
+    const noCandidate = await page.getByTestId('files-empty-candidate').isVisible().catch(() => false)
+
+    expect(hasTable || hasEmpty || noCandidate).toBeTruthy()
   })
 
   test('should navigate back to applicants list', async ({ page }) => {
@@ -103,14 +109,41 @@ test.describe('Applicants Detail @admin @applicants', () => {
   })
 
   test('should have all field sections visible', async ({ page }) => {
-    // All fields should be present
+    // All Candidate fields should be present
     await expect(page.getByTestId('field-name')).toBeVisible()
     await expect(page.getByTestId('field-surname')).toBeVisible()
+    await expect(page.getByTestId('field-cis-identifier')).toBeVisible()
     await expect(page.getByTestId('field-email')).toBeVisible()
-    await expect(page.getByTestId('field-username')).toBeVisible()
-    await expect(page.getByTestId('field-role')).toBeVisible()
+    await expect(page.getByTestId('field-phone')).toBeVisible()
+    await expect(page.getByTestId('field-birth-date')).toBeVisible()
     await expect(page.getByTestId('field-status')).toBeVisible()
-    await expect(page.getByTestId('field-created')).toBeVisible()
-    await expect(page.getByTestId('field-updated')).toBeVisible()
+    await expect(page.getByTestId('field-registered')).toBeVisible()
+    await expect(page.getByTestId('field-last-login')).toBeVisible()
+  })
+
+  test('should display tests tab with data or empty state', async ({ page }) => {
+    await page.getByTestId('tests-tab').click()
+
+    await expect(page.getByTestId('tests-tab')).toHaveClass(/border-blue-500/)
+    await expect(page.getByTestId('tests-content')).toBeVisible()
+
+    const hasTable = await page.getByTestId('tests-table').isVisible().catch(() => false)
+    const hasEmpty = await page.getByTestId('tests-empty').isVisible().catch(() => false)
+    const noCandidate = await page.getByTestId('tests-empty-candidate').isVisible().catch(() => false)
+
+    expect(hasTable || hasEmpty || noCandidate).toBeTruthy()
+  })
+
+  test('should display evaluations tab with data or empty state', async ({ page }) => {
+    await page.getByTestId('evaluations-tab').click()
+
+    await expect(page.getByTestId('evaluations-tab')).toHaveClass(/border-blue-500/)
+    await expect(page.getByTestId('evaluations-content')).toBeVisible()
+
+    const hasTable = await page.getByTestId('evaluations-table').isVisible().catch(() => false)
+    const hasEmpty = await page.getByTestId('evaluations-empty').isVisible().catch(() => false)
+    const noCandidate = await page.getByTestId('evaluations-empty-candidate').isVisible().catch(() => false)
+
+    expect(hasTable || hasEmpty || noCandidate).toBeTruthy()
   })
 })

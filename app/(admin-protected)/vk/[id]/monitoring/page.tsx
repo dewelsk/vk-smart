@@ -302,7 +302,14 @@ export default function MonitoringPage() {
                           <div className="font-medium text-gray-900">
                             Level {candidate.currentSession.test.level}: {candidate.currentSession.test.name}
                           </div>
-                          <div className="text-gray-500">{candidate.currentSession.test.type}</div>
+                          <div className="text-gray-500">
+                            {candidate.currentSession.test.testType?.name || '—'}
+                            {candidate.currentSession.test.testTypeCondition && (
+                              <span className="ml-1 text-gray-400">
+                                · {candidate.currentSession.test.testTypeCondition.name}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <span className="text-sm text-gray-500">-</span>

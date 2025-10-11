@@ -21,7 +21,6 @@ export async function DELETE(
       where: { id: roleId },
       include: {
         user: true,
-        institution: true,
       },
     })
 
@@ -48,23 +47,7 @@ export async function DELETE(
       )
     }
 
-    // RBAC: Admin can only remove roles from their institutions
-    if (session.user.role === 'ADMIN') {
-      if (!roleAssignment.institutionId) {
-        return NextResponse.json(
-          { error: 'Cannot remove global roles' },
-          { status: 403 }
-        )
-      }
-
-      const userInstitutionIds = session.user.institutions.map(i => i.id)
-      if (!userInstitutionIds.includes(roleAssignment.institutionId)) {
-        return NextResponse.json(
-          { error: 'You can only remove roles from your institutions' },
-          { status: 403 }
-        )
-      }
-    }
+    // RBAC: Removed institution-based RBAC check (institutions model removed)
 
     // Delete role assignment
     await prisma.userRoleAssignment.delete({

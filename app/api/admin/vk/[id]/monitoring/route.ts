@@ -87,7 +87,24 @@ export async function GET(
             ]
           },
           include: {
-            test: true,
+            test: {
+              include: {
+                testType: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                  }
+                },
+                testTypeCondition: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                  }
+                }
+              }
+            },
             vkTest: true
           },
           orderBy: {
@@ -144,7 +161,22 @@ export async function GET(
           test: {
             level: currentSession.vkTest.level,
             name: currentSession.test.name,
-            type: currentSession.test.type
+            testTypeId: currentSession.test.testTypeId,
+            testType: currentSession.test.testType
+              ? {
+                  id: currentSession.test.testType.id,
+                  name: currentSession.test.testType.name,
+                  description: currentSession.test.testType.description,
+                }
+              : null,
+            testTypeConditionId: currentSession.test.testTypeConditionId,
+            testTypeCondition: currentSession.test.testTypeCondition
+              ? {
+                  id: currentSession.test.testTypeCondition.id,
+                  name: currentSession.test.testTypeCondition.name,
+                  description: currentSession.test.testTypeCondition.description,
+                }
+              : null
           },
           serverStartTime: currentSession.serverStartTime,
           durationSeconds: currentSession.durationSeconds,

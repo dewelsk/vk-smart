@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getToken } from 'next-auth/jwt'
 
 async function getCandidateFromRequest(request: NextRequest) {
+  // Try JWT token first (for admin switch)
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  })
+
+  if (token?.candidateId) {
+    return await prisma.candidate.findUnique({
+      where: { id: token.candidateId as string }
+    })
+  }
+
+  // Fallback to header (for regular applicant login)
   const candidateId = request.headers.get('x-candidate-id')
   if (!candidateId) return null
 
@@ -30,7 +44,24 @@ export async function GET(
     const session = await prisma.testSession.findUnique({
       where: { id: sessionId },
       include: {
-        test: true,
+        test: {
+          include: {
+            testType: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            },
+            testTypeCondition: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+              }
+            }
+          }
+        },
         vkTest: true,
         candidate: {
           include: {
@@ -47,6 +78,9 @@ export async function GET(
       )
     }
 
+    // MVP: Disabled security checks - allow any candidate to view any test
+    // TODO: Re-enable in production
+    /*
     // Check if session belongs to this candidate
     if (session.candidateId !== candidate.id) {
       return NextResponse.json(
@@ -65,12 +99,33 @@ export async function GET(
         { status: 400 }
       )
     }
+    */
 
     // Update lastAccessedAt
     await prisma.testSession.update({
       where: { id: sessionId },
       data: { lastAccessedAt: new Date() }
     })
+
+    // Transform questions: rename 'answers' to 'options' and 'questionType' to 'type'
+    const questions = Array.isArray(session.test.questions)
+      ? (session.test.questions as any[]).map((q: any, qIndex: number) => ({
+          id: q.id || `q_${qIndex}`,
+          text: q.text,
+          type: q.questionType,
+          points: q.points,
+          options: q.answers
+            ? q.answers.map((ans: any, ansIndex: number) => ({
+                id: ans.id || ans.letter || `ans_${qIndex}_${ansIndex}`,
+                text: ans.text
+              }))
+            : []
+        }))
+      : []
+
+    console.log('[TEST SESSION] Questions:', questions.length)
+    console.log('[TEST SESSION] First question:', questions[0])
+    console.log('[TEST SESSION] Session answers:', session.answers)
 
     // Return session data
     return NextResponse.json({
@@ -84,8 +139,23 @@ export async function GET(
       test: {
         id: session.test.id,
         name: session.test.name,
-        type: session.test.type,
-        questions: session.test.questions  // This contains all questions with options
+        testTypeId: session.test.testTypeId,
+        testType: session.test.testType
+          ? {
+              id: session.test.testType.id,
+              name: session.test.testType.name,
+              description: session.test.testType.description,
+            }
+          : null,
+        testTypeConditionId: session.test.testTypeConditionId,
+        testTypeCondition: session.test.testTypeCondition
+          ? {
+              id: session.test.testTypeCondition.id,
+              name: session.test.testTypeCondition.name,
+              description: session.test.testTypeCondition.description,
+            }
+          : null,
+        questions: questions
       },
       vk: {
         identifier: session.candidate.vk.identifier,

@@ -1,0 +1,17 @@
+import eslint from '@eslint/js'
+import next from 'eslint-config-next'
+
+export default [
+  {
+    ignores: [
+      '.next/**',
+      'node_modules/**',
+      'storage/**',
+      'playwright-report/**',
+      'test-results/**',
+      'prisma/migrations/**',
+    ],
+  },
+  eslint.configs.recommended,
+  ...next.configs.strict,
+]

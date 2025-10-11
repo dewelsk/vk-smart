@@ -58,7 +58,7 @@ describe('Tests API - Question Types', () => {
     it('should create test with valid allowedQuestionTypes', async () => {
       const testData = {
         name: 'Test with Question Types ' + Date.now(),
-        type: 'ODBORNY',
+        testTypeId,
         categoryId: testCategoryId,
         recommendedDuration: 45,
         recommendedQuestionCount: 10,
@@ -81,7 +81,7 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: testData.name,
-          type: testData.type as any,
+          testTypeId: testData.testTypeId,
           categoryId: testData.categoryId,
           recommendedDuration: testData.recommendedDuration,
           recommendedQuestionCount: testData.recommendedQuestionCount,
@@ -103,7 +103,7 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: 'Test Default Types ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
           categoryId: testCategoryId,
           recommendedDuration: 45,
           questions: []
@@ -121,7 +121,7 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: 'Test All Types ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
           categoryId: testCategoryId,
           allowedQuestionTypes: allTypes,
           questions: []
@@ -138,7 +138,7 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: 'Test Query Types ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
           categoryId: testCategoryId,
           allowedQuestionTypes: ['TRUE_FALSE', 'OPEN_ENDED'],
           questions: []
@@ -165,7 +165,7 @@ describe('Tests API - Question Types', () => {
       const test1 = await prisma.test.create({
         data: {
           name: 'List Test 1 ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
           categoryId: testCategoryId,
           allowedQuestionTypes: ['SINGLE_CHOICE'],
           questions: []
@@ -177,7 +177,7 @@ describe('Tests API - Question Types', () => {
       const test2 = await prisma.test.create({
         data: {
           name: 'List Test 2 ' + Date.now(),
-          type: 'VSEOBECNY',
+          testTypeId,
           categoryId: testCategoryId,
           allowedQuestionTypes: ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE'],
           questions: []
@@ -269,7 +269,7 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: 'Update Test ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
           categoryId: testCategoryId,
           allowedQuestionTypes: ['SINGLE_CHOICE'],
           questions: []
@@ -333,7 +333,7 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: 'Detail Test ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
           categoryId: testCategoryId,
           description: 'Test description',
           difficulty: 5,
@@ -433,7 +433,7 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: 'Test to Update ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
           categoryId: testCategoryId,
           description: 'Original description',
           difficulty: 3,
@@ -564,7 +564,7 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: 'Test with Question Types ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
           categoryId: testCategoryId,
           allowedQuestionTypes: ['SINGLE_CHOICE', 'MULTIPLE_CHOICE'],
           questions: [
@@ -624,7 +624,8 @@ describe('Tests API - Question Types', () => {
       const test = await prisma.test.create({
         data: {
           name: 'Multi Type Test ' + Date.now(),
-          type: 'ODBORNY',
+          testTypeId,
+          testTypeConditionId,
           categoryId: testCategoryId,
           allowedQuestionTypes: ['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_FALSE', 'OPEN_ENDED'],
           questions: [

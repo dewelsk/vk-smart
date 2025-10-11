@@ -36,18 +36,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'VK not found' }, { status: 404 })
     }
 
-    // Check permissions for ADMIN
-    if (session.user.role === 'ADMIN') {
-      const userInstitutions = await prisma.userInstitution.findMany({
-        where: { userId: session.user.id },
-        select: { institutionId: true }
-      })
-      const institutionIds = userInstitutions.map(ui => ui.institutionId)
-
-      if (!institutionIds.includes(vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-    }
+    // ADMIN can change gestor for any VK (no institution restrictions anymore)
 
     // Check if new gestor exists and has GESTOR role
     const newGestor = await prisma.user.findUnique({
@@ -81,7 +70,6 @@ export async function PATCH(
       data: { gestorId },
       include: {
         gestor: true,
-        institution: true
       }
     })
 

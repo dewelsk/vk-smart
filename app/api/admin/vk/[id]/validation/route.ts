@@ -51,18 +51,8 @@ export async function GET(
     }
 
     // Check permissions
-    if (session.user.role === 'ADMIN') {
-      // Admin can only see VK from their institutions
-      const userInstitutions = await prisma.userInstitution.findMany({
-        where: { userId: session.user.id },
-        select: { institutionId: true }
-      })
-      const institutionIds = userInstitutions.map(ui => ui.institutionId)
-
-      if (!institutionIds.includes(vk.institutionId)) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
-    } else if (session.user.role === 'GESTOR') {
+    // ADMIN can access any VK (no institution restrictions anymore)
+    if (session.user.role === 'GESTOR') {
       // Gestor can only see VK where they are assigned
       if (vk.gestorId !== session.user.id) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

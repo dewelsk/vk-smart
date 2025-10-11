@@ -10,9 +10,10 @@ test.describe('Admin Dashboard @admin @dashboard @smoke', () => {
     await expect(page.getByTestId('page-title')).toContainText('Dashboard')
 
     // Check stats cards are visible
-    await expect(page.getByTestId('active-vk-card')).toBeVisible()
-    await expect(page.getByTestId('candidates-card')).toBeVisible()
-    await expect(page.getByTestId('users-card')).toBeVisible()
+    await expect(page.getByTestId('stat-vk')).toBeVisible()
+    await expect(page.getByTestId('stat-applicants')).toBeVisible()
+    await expect(page.getByTestId('stat-users')).toBeVisible()
+    await expect(page.getByTestId('stat-tests')).toBeVisible()
   })
 
   test('should display stats numbers', async ({ page }) => {
@@ -23,19 +24,19 @@ test.describe('Admin Dashboard @admin @dashboard @smoke', () => {
   })
 
   test('should navigate to VK list when clicking Active VK card', async ({ page }) => {
-    await page.getByTestId('active-vk-card').click()
+    await page.getByTestId('stat-vk').click()
     await page.waitForURL('/vk')
     await expect(page).toHaveURL('/vk')
   })
 
   test('should navigate to applicants list when clicking Applicants card', async ({ page }) => {
-    await page.getByTestId('candidates-card').click()
+    await page.getByTestId('stat-applicants').click()
     await page.waitForURL('/applicants')
     await expect(page).toHaveURL('/applicants')
   })
 
   test('should navigate to users list when clicking Users card', async ({ page }) => {
-    await page.getByTestId('users-card').click()
+    await page.getByTestId('stat-users').click()
     await page.waitForURL('/users')
     await expect(page).toHaveURL('/users')
   })
