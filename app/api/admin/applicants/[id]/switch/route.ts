@@ -67,12 +67,19 @@ export async function POST(
     }
 
     // Get current token
+    const isProduction = process.env.NODE_ENV === 'production'
+    const cookieName = isProduction
+      ? '__Secure-authjs.session-token'
+      : 'authjs.session-token'
+
     const token = await getToken({
       req: request,
       secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+      cookieName: cookieName,
     })
 
     if (!token) {
+      console.error('Failed to get token. Cookie name:', cookieName, 'Environment:', process.env.NODE_ENV)
       return NextResponse.json(
         { error: 'Chyba pri získaní tokenu' },
         { status: 500 }
@@ -145,12 +152,12 @@ export async function POST(
       message: `Prepnuté na ${targetCandidate.name} ${targetCandidate.surname}`,
     })
 
-    // Set new session cookie
+    // Set new session cookie (use __Secure- prefix in production for HTTPS)
     response.cookies.set({
-      name: 'authjs.session-token',
+      name: cookieName,
       value: encodedToken,
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction,
       sameSite: 'lax',
       maxAge: 24 * 60 * 60, // 24 hours
       path: '/',

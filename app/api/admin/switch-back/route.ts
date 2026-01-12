@@ -28,10 +28,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current token
+    const isProduction = process.env.NODE_ENV === 'production'
+    const cookieName = isProduction
+      ? '__Secure-authjs.session-token'
+      : 'authjs.session-token'
+
     const token = await getToken({
       req: request,
       secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+      cookieName: cookieName,
     })
+
+    if (!token) {
+      console.error('Failed to get token. Cookie name:', cookieName, 'Environment:', process.env.NODE_ENV)
+      return NextResponse.json(
+        { error: 'Chyba pri získaní tokenu' },
+        { status: 500 }
+      )
+    }
 
     console.log('[SWITCH-BACK] Token:', {
       hasToken: !!token,
@@ -39,14 +53,6 @@ export async function POST(request: NextRequest) {
       originalRole: token?.originalRole,
       originalUsername: token?.originalUsername,
     })
-
-    if (!token) {
-      console.log('[SWITCH-BACK] ERROR: No token')
-      return NextResponse.json(
-        { error: 'Chyba pri získaní tokenu' },
-        { status: 500 }
-      )
-    }
 
     // Check if user is currently switched
     if (!token.originalUserId || !token.originalRole || !token.originalUsername) {
@@ -134,12 +140,12 @@ export async function POST(request: NextRequest) {
       message: `Prepnuté späť na ${token.originalUsername}`,
     })
 
-    // Set restored session cookie
+    // Set restored session cookie (use __Secure- prefix in production for HTTPS)
     response.cookies.set({
-      name: 'authjs.session-token',
+      name: cookieName,
       value: encodedToken,
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction,
       sameSite: 'lax',
       maxAge: 24 * 60 * 60, // 24 hours
       path: '/',
