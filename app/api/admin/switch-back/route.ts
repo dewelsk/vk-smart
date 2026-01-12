@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     const encodedToken = await encode({
       token: restoredToken,
       secret: secret,
-      salt: 'authjs.session-token',
+      salt: cookieName,
     })
 
     // Audit log

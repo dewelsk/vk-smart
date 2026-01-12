@@ -117,7 +117,7 @@ export async function POST(
     const encodedToken = await encode({
       token: newToken,
       secret: secret,
-      salt: 'authjs.session-token',
+      salt: cookieName,
     })
 
     // Update candidate last login
