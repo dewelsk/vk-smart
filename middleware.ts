@@ -29,10 +29,21 @@ export default auth(async (req) => {
     return NextResponse.redirect(loginUrl)
   }
 
+  // Redirect root path to dashboard for authenticated users
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL('/dashboard', req.url))
+  }
+
   // Get token to check user type and role
+  const isProduction = process.env.NODE_ENV === 'production'
+  const cookieName = isProduction
+    ? '__Secure-authjs.session-token'
+    : 'authjs.session-token'
+
   const token = await getToken({
     req,
     secret: process.env.AUTH_SECRET!,
+    cookieName: cookieName,
   })
 
   // Identify route types
@@ -91,4 +102,5 @@ export const config = {
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
+  runtime: 'nodejs',
 }
