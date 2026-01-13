@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
+import { encode } from 'next-auth/jwt'
 
 export async function POST(request: NextRequest) {
   try {
@@ -88,27 +89,58 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 7. Update lastLoginAt
+    // 7. Update lastLoginAt for both user and candidate
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() }
     })
 
-    // 8. Create session token (simplified - in production use NextAuth or JWT)
-    const sessionData = {
+    await prisma.candidate.update({
+      where: { id: candidate.id },
+      data: { lastLoginAt: new Date() }
+    })
+
+    // 8. Create signed JWT token (secure authentication)
+    const isProduction = process.env.NODE_ENV === 'production'
+    const cookieName = isProduction
+      ? '__Secure-authjs.session-token'
+      : 'authjs.session-token'
+
+    const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET
+    if (!secret) {
+      console.error('AUTH_SECRET or NEXTAUTH_SECRET not configured')
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
+
+    // Create JWT payload for candidate session
+    const token = {
+      id: candidate.id,
       userId: user.id,
       candidateId: candidate.id,
       vkId: vk.id,
-      role: user.role,
+      type: 'candidate',
+      role: 'UCHADZAC',
+      name: user.name,
+      surname: user.surname,
+      email: user.email,
       cisIdentifier: candidate.cisIdentifier,
-      vkIdentifier: vk.identifier
+      vkIdentifier: vk.identifier,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // 24 hours
     }
 
-    // In production, this should be a signed JWT token
-    // For now, return session data (frontend will store in secure cookie)
-    return NextResponse.json({
+    const encodedToken = await encode({
+      token,
+      secret,
+      salt: cookieName,
+    })
+
+    // Create response with JWT cookie
+    const response = NextResponse.json({
       success: true,
-      session: sessionData,
       user: {
         name: user.name,
         surname: user.surname,
@@ -119,8 +151,25 @@ export async function POST(request: NextRequest) {
         identifier: vk.identifier,
         position: vk.position,
         organizationalUnit: vk.organizationalUnit
+      },
+      candidate: {
+        id: candidate.id,
+        cisIdentifier: candidate.cisIdentifier
       }
     })
+
+    // Set secure HTTP-only cookie with JWT
+    response.cookies.set({
+      name: cookieName,
+      value: encodedToken,
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60, // 24 hours
+      path: '/',
+    })
+
+    return response
   } catch (error) {
     console.error('Login error:', error)
     return NextResponse.json(

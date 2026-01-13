@@ -36,30 +36,20 @@ export default function TestResultPage() {
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    const sessionData = sessionStorage.getItem('applicant-session')
-    if (!sessionData) {
-      router.push('/applicant/login')
-      return
-    }
-
-    const session = JSON.parse(sessionData)
-    setCandidateId(session.candidateId)
-
-    loadResult(session.candidateId)
+    loadResult()
   }, [sessionId, router])
 
-  const loadResult = async (candidateId: string) => {
+  const loadResult = async () => {
     try {
-      const response = await fetch(`/api/applicant/test/${sessionId}/result`, {
-        headers: {
-          'x-candidate-id': candidateId
-        }
-      })
+      // Uses JWT cookie for authentication
+      const response = await fetch(`/api/applicant/test/${sessionId}/result`)
 
       if (!response.ok) {
         const data = await response.json()
         if (data.redirectUrl) {
           router.push(data.redirectUrl)
+        } else if (response.status === 401) {
+          router.push('/applicant/login')
         } else {
           toast.error(data.error || 'Chyba pri načítaní výsledku')
         }
@@ -268,7 +258,7 @@ export default function TestResultPage() {
 
           <div className="flex gap-4">
             <button
-              onClick={() => router.push('/my-tests')}
+              onClick={() => router.push('/applicant/my-tests')}
               className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 bg-white text-sm font-medium px-4 py-2 rounded-md hover:bg-gray-50"
               data-testid="back-to-dashboard-button"
             >
@@ -278,7 +268,7 @@ export default function TestResultPage() {
 
             {nextTest && result?.passed && (
               <button
-                onClick={() => router.push('/my-tests')}
+                onClick={() => router.push('/applicant/my-tests')}
                 className="inline-flex items-center gap-2 bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-blue-700"
                 data-testid="continue-to-next-level-button"
               >

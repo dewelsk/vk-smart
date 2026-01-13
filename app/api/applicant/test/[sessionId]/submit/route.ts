@@ -1,28 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getToken } from 'next-auth/jwt'
-
-async function getCandidateFromRequest(request: NextRequest) {
-  // Try JWT token first (for admin switch)
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-  })
-
-  if (token?.candidateId) {
-    return await prisma.candidate.findUnique({
-      where: { id: token.candidateId as string }
-    })
-  }
-
-  // Fallback to header (for regular applicant login)
-  const candidateId = request.headers.get('x-candidate-id')
-  if (!candidateId) return null
-
-  return await prisma.candidate.findUnique({
-    where: { id: candidateId }
-  })
-}
+import { getAuthenticatedCandidate } from '@/lib/applicant-auth'
 
 // Calculate score and check if passed
 function evaluateTest(answers: Record<string, any>, questions: any[], scorePerQuestion: number, minScore: number) {
@@ -32,7 +10,7 @@ function evaluateTest(answers: Record<string, any>, questions: any[], scorePerQu
   questions.forEach((q: any) => {
     const userAnswer = answers[q.id]
 
-    if (userAnswer && compareAnswers(userAnswer, q.correctAnswer, q.type)) {
+    if (userAnswer && compareAnswers(userAnswer, q.correctAnswer, q.questionType)) {
       correctCount++
     }
   })
@@ -77,7 +55,8 @@ export async function POST(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const candidate = await getCandidateFromRequest(request)
+    // SECURITY: Only accept JWT-based authentication
+    const candidate = await getAuthenticatedCandidate(request)
 
     if (!candidate) {
       return NextResponse.json(
@@ -104,7 +83,7 @@ export async function POST(
       )
     }
 
-    // Check ownership
+    // SECURITY: Check ownership
     if (session.candidateId !== candidate.id) {
       return NextResponse.json(
         { error: 'Tento test nepatrí k vášmu účtu' },
@@ -112,7 +91,7 @@ export async function POST(
       )
     }
 
-    // Check if already completed
+    // SECURITY: Check if already completed
     if (session.status === 'COMPLETED') {
       return NextResponse.json(
         { error: 'Test už bol odoslaný' },

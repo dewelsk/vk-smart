@@ -110,82 +110,71 @@ export default function ApplicantDashboardPage() {
   const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
-    // Load session from API (supports both regular login and admin switch)
+    // Load dashboard data using JWT cookie authentication
     const loadSession = async () => {
       try {
-        const response = await fetch('/api/applicant/session')
+        // Dashboard API uses JWT cookie for authentication
+        const response = await fetch('/api/applicant/dashboard')
 
         if (!response.ok) {
-          // Try fallback to sessionStorage (for regular applicant login)
-          const sessionData = sessionStorage.getItem('applicant-session')
-          const userData = sessionStorage.getItem('applicant-user')
+          toast.error('Nie ste prihlásený')
+          router.push('/applicant/login')
+          return
+        }
 
-          if (!sessionData || !userData) {
-            toast.error('Nie ste prihlásený')
-            router.push('/applicant/login')
-            return
-          }
+        const data = await response.json()
+        setVk(data.vk)
+        setTests(data.tests)
+        setLoading(false)
 
-          const session = JSON.parse(sessionData)
+        // Get user info from sessionStorage for display
+        const userData = sessionStorage.getItem('applicant-user')
+        const candidateData = sessionStorage.getItem('applicant-candidate')
+        if (userData) {
           const user = JSON.parse(userData)
-          setCandidateId(session.candidateId)
-          setVkId(session.vkId || '')
           setUserName(`${user.name} ${user.surname}`)
-
-          loadDashboard(session.candidateId)
-          if (session.vkId) {
-            loadAttachments(session.candidateId, session.vkId, { silent: true })
-          }
-
-          // Auto-refresh every 10 seconds
-          const interval = setInterval(() => {
-            loadDashboard(session.candidateId)
-          }, 10000)
-
-          return () => clearInterval(interval)
+        }
+        if (candidateData) {
+          const candidate = JSON.parse(candidateData)
+          setCandidateId(candidate.id)
         }
 
-        // Use session from API (admin switch or regular login)
-        const sessionData = await response.json()
-        setCandidateId(sessionData.candidateId)
-        setVkId(sessionData.vkId || '')
-        setUserName(`${sessionData.name} ${sessionData.surname}`)
-
-        loadDashboard(sessionData.candidateId)
-        if (sessionData.vkId) {
-          loadAttachments(sessionData.candidateId, sessionData.vkId, { silent: true })
+        // Set vkId from the response
+        if (data.vk?.identifier) {
+          setVkId(data.vk.identifier)
         }
+
+        // Load attachments
+        loadAttachments({ silent: true })
 
         // Auto-refresh every 10 seconds
         const interval = setInterval(() => {
-          loadDashboard(sessionData.candidateId)
+          loadDashboardData()
         }, 10000)
 
         return () => clearInterval(interval)
       } catch (error) {
         console.error('Session load error:', error)
         toast.error('Chyba pri načítaní session')
+        router.push('/applicant/login')
       }
     }
 
     loadSession()
-  }, [router, loadAttachments])
+  }, [router])
 
   useEffect(() => {
-    if (activeTab !== 'attachments' || !candidateId || !vkId) {
+    if (activeTab !== 'attachments') {
       return
     }
 
-    loadAttachments(candidateId, vkId)
-  }, [activeTab, candidateId, vkId, loadAttachments])
+    loadAttachments()
+  }, [activeTab])
 
-  const loadDashboard = async (candidateId: string) => {
+  const loadDashboardData = async () => {
     try {
-      const response = await fetch('/api/applicant/dashboard', {
-        headers: {
-          'x-candidate-id': candidateId
-        }
-      })
+      // Uses JWT cookie for authentication
+      const response = await fetch('/api/applicant/dashboard')
 
       if (!response.ok) {
         throw new Error('Chyba pri načítaní dashboardu')
@@ -196,32 +185,21 @@ export default function ApplicantDashboardPage() {
       setTests(data.tests)
     } catch (error) {
       console.error('Dashboard load error:', error)
-      toast.error('Chyba pri načítaní dát')
     } finally {
       setLoading(false)
     }
   }
 
   const loadAttachments = useCallback(async (
-    candidate: string,
-    vkIdParam: string,
     { silent = false }: { silent?: boolean } = {}
   ) => {
-    if (!candidate || !vkIdParam) {
-      return
-    }
-
     if (!silent) {
       setAttachmentsLoading(true)
     }
 
     try {
-      const response = await fetch('/api/applicant/attachments', {
-        headers: {
-          'x-candidate-id': candidate,
-          'x-vk-id': vkIdParam,
-        }
-      })
+      // Uses JWT cookie for authentication
+      const response = await fetch('/api/applicant/attachments')
 
       if (!response.ok) {
         throw new Error('Chyba pri načítaní príloh')
@@ -280,16 +258,6 @@ export default function ApplicantDashboardPage() {
   }
 
   const handleUpload = async () => {
-    if (!candidateId) {
-      toast.error('Chýba identifikátor uchádzača')
-      return
-    }
-
-    if (!vkId) {
-      toast.error('Nie je dostupné ID výberového konania')
-      return
-    }
-
     if (pendingFiles.length === 0) {
       toast.error('Vyberte súbory na nahratie')
       return
@@ -304,12 +272,9 @@ export default function ApplicantDashboardPage() {
         formData.append('documentTypes', itemType)
       })
 
+      // Uses JWT cookie for authentication
       const response = await fetch('/api/applicant/attachments', {
         method: 'POST',
-        headers: {
-          'x-candidate-id': candidateId,
-          'x-vk-id': vkId,
-        },
         body: formData,
       })
 
@@ -321,7 +286,7 @@ export default function ApplicantDashboardPage() {
 
       toast.success('Prílohy boli úspešne nahraté')
       setPendingFiles([])
-      await loadAttachments(candidateId, vkId)
+      await loadAttachments()
     } catch (error) {
       console.error('Upload error:', error)
       toast.error(error instanceof Error ? error.message : 'Nepodarilo sa nahrať prílohy')
@@ -331,23 +296,10 @@ export default function ApplicantDashboardPage() {
   }
 
   const handleDeleteAttachment = async (attachmentId: string) => {
-    if (!candidateId) {
-      toast.error('Chýba identifikátor uchádzača')
-      return
-    }
-
-    if (!vkId) {
-      toast.error('Nie je dostupné ID výberového konania')
-      return
-    }
-
     try {
+      // Uses JWT cookie for authentication
       const response = await fetch(`/api/applicant/attachments/${attachmentId}`, {
         method: 'DELETE',
-        headers: {
-          'x-candidate-id': candidateId,
-          'x-vk-id': vkId,
-        },
       })
 
       if (!response.ok) {
@@ -364,23 +316,9 @@ export default function ApplicantDashboardPage() {
   }
 
   const handleDownloadAttachment = async (attachment: AttachmentData) => {
-    if (!candidateId) {
-      toast.error('Chýba identifikátor uchádzača')
-      return
-    }
-
-    if (!vkId) {
-      toast.error('Nie je dostupné ID výberového konania')
-      return
-    }
-
     try {
-      const response = await fetch(`/api/applicant/attachments/${attachment.id}`, {
-        headers: {
-          'x-candidate-id': candidateId,
-          'x-vk-id': vkId,
-        },
-      })
+      // Uses JWT cookie for authentication
+      const response = await fetch(`/api/applicant/attachments/${attachment.id}`)
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
@@ -406,11 +344,11 @@ export default function ApplicantDashboardPage() {
     try {
       toast.loading('Spúšťam test...')
 
+      // Uses JWT cookie for authentication
       const response = await fetch('/api/applicant/test/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-candidate-id': candidateId
         },
         body: JSON.stringify({ vkTestId })
       })
@@ -431,10 +369,19 @@ export default function ApplicantDashboardPage() {
     }
   }
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('applicant-session')
+  const handleLogout = async () => {
+    // Clear session storage
     sessionStorage.removeItem('applicant-user')
     sessionStorage.removeItem('applicant-vk')
+    sessionStorage.removeItem('applicant-candidate')
+
+    // Clear the auth cookie by calling logout endpoint
+    try {
+      await fetch('/api/applicant/logout', { method: 'POST' })
+    } catch (e) {
+      // Ignore errors
+    }
+
     router.push('/applicant/login')
   }
 

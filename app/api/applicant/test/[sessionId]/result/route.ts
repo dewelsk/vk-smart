@@ -1,21 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-
-async function getCandidateFromRequest(request: NextRequest) {
-  const candidateId = request.headers.get('x-candidate-id')
-  if (!candidateId) return null
-
-  return await prisma.candidate.findUnique({
-    where: { id: candidateId }
-  })
-}
+import { getAuthenticatedCandidate } from '@/lib/applicant-auth'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const candidate = await getCandidateFromRequest(request)
+    // SECURITY: Only accept JWT-based authentication
+    const candidate = await getAuthenticatedCandidate(request)
 
     if (!candidate) {
       return NextResponse.json(
@@ -59,7 +52,7 @@ export async function GET(
       )
     }
 
-    // Check ownership
+    // SECURITY: Check ownership
     if (session.candidateId !== candidate.id) {
       return NextResponse.json(
         { error: 'Tento test nepatrí k vášmu účtu' },
