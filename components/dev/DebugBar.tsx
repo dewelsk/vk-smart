@@ -2,6 +2,22 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import {
+  WrenchScrewdriverIcon,
+  ClockIcon,
+  SignalIcon,
+  CircleStackIcon,
+  CheckIcon,
+  ExclamationTriangleIcon,
+  XMarkIcon,
+  LightBulbIcon,
+  SparklesIcon,
+  ArrowPathIcon,
+  ChartBarIcon,
+  MagnifyingGlassIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+} from '@heroicons/react/24/outline'
 
 export function DebugBar() {
   const pathname = usePathname()
@@ -82,15 +98,27 @@ export function DebugBar() {
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex items-center gap-4">
-          <span className="font-bold text-blue-400">🔧 Debug Bar</span>
+          <span className="font-bold text-blue-400 inline-flex items-center gap-1">
+            <WrenchScrewdriverIcon className="h-4 w-4" /> Debug Bar
+          </span>
           <div className="flex gap-4 text-sm">
-            <span>🎨 {metrics.renderTime}ms</span>
-            <span>📡 {metrics.apiCalls} API calls</span>
-            {metrics.memory > 0 && <span>💾 {metrics.memory}MB</span>}
+            <span className="inline-flex items-center gap-1">
+              <ClockIcon className="h-4 w-4" /> {metrics.renderTime}ms
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <SignalIcon className="h-4 w-4" /> {metrics.apiCalls} API calls
+            </span>
+            {metrics.memory > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <CircleStackIcon className="h-4 w-4" /> {metrics.memory}MB
+              </span>
+            )}
             <span className="text-gray-500">Route: {pathname}</span>
           </div>
         </div>
-        <span className="text-gray-400">{isOpen ? '▼' : '▲'}</span>
+        <span className="text-gray-400">
+          {isOpen ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronUpIcon className="h-4 w-4" />}
+        </span>
       </div>
 
       {/* Detailed info */}
@@ -105,8 +133,16 @@ export function DebugBar() {
             <div className="bg-gray-800 p-3 rounded">
               <div className="text-xs text-gray-400 mb-1">Route Render</div>
               <div className="text-2xl font-bold text-green-400">{metrics.renderTime}ms</div>
-              <div className="text-xs text-gray-500 mt-1">
-                {metrics.renderTime === 0 ? '⏳ Loading...' : metrics.renderTime < 100 ? '✅ Fast' : metrics.renderTime < 300 ? '⚠️ Slow' : '❌ Very slow'}
+              <div className="text-xs text-gray-500 mt-1 inline-flex items-center gap-1">
+                {metrics.renderTime === 0 ? (
+                  <>Loading...</>
+                ) : metrics.renderTime < 100 ? (
+                  <><CheckIcon className="h-3 w-3 text-green-400" /> Fast</>
+                ) : metrics.renderTime < 300 ? (
+                  <><ExclamationTriangleIcon className="h-3 w-3 text-yellow-400" /> Slow</>
+                ) : (
+                  <><XMarkIcon className="h-3 w-3 text-red-400" /> Very slow</>
+                )}
               </div>
             </div>
 
@@ -114,8 +150,16 @@ export function DebugBar() {
             <div className="bg-gray-800 p-3 rounded">
               <div className="text-xs text-gray-400 mb-1">API Calls (this route)</div>
               <div className="text-2xl font-bold text-purple-400">{metrics.apiCalls}</div>
-              <div className="text-xs text-gray-500 mt-1">
-                {metrics.apiCalls === 0 ? '✅ Cached / None' : metrics.apiCalls <= 2 ? '✅ Good' : metrics.apiCalls <= 5 ? '⚠️ Many' : '❌ Too many'}
+              <div className="text-xs text-gray-500 mt-1 inline-flex items-center gap-1">
+                {metrics.apiCalls === 0 ? (
+                  <><CheckIcon className="h-3 w-3 text-green-400" /> Cached / None</>
+                ) : metrics.apiCalls <= 2 ? (
+                  <><CheckIcon className="h-3 w-3 text-green-400" /> Good</>
+                ) : metrics.apiCalls <= 5 ? (
+                  <><ExclamationTriangleIcon className="h-3 w-3 text-yellow-400" /> Many</>
+                ) : (
+                  <><XMarkIcon className="h-3 w-3 text-red-400" /> Too many</>
+                )}
               </div>
             </div>
 
@@ -124,8 +168,14 @@ export function DebugBar() {
               <div className="bg-gray-800 p-3 rounded">
                 <div className="text-xs text-gray-400 mb-1">JS Memory</div>
                 <div className="text-2xl font-bold text-yellow-400">{metrics.memory}MB</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {metrics.memory < 50 ? '✅ Low' : metrics.memory < 100 ? '⚠️ Medium' : '❌ High'}
+                <div className="text-xs text-gray-500 mt-1 inline-flex items-center gap-1">
+                  {metrics.memory < 50 ? (
+                    <><CheckIcon className="h-3 w-3 text-green-400" /> Low</>
+                  ) : metrics.memory < 100 ? (
+                    <><ExclamationTriangleIcon className="h-3 w-3 text-yellow-400" /> Medium</>
+                  ) : (
+                    <><XMarkIcon className="h-3 w-3 text-red-400" /> High</>
+                  )}
                 </div>
               </div>
             )}
@@ -133,13 +183,17 @@ export function DebugBar() {
 
           {/* Performance tips */}
           <div className="mt-4 p-3 bg-gray-800 rounded">
-            <div className="text-sm font-semibold mb-2">💡 Performance Tips:</div>
+            <div className="text-sm font-semibold mb-2 inline-flex items-center gap-1">
+              <LightBulbIcon className="h-4 w-4 text-yellow-400" /> Performance Tips:
+            </div>
             <ul className="text-xs space-y-1 text-gray-300">
               {metrics.renderTime > 300 && (
                 <li>• Route rendering is slow - check component complexity</li>
               )}
               {metrics.apiCalls === 0 && metrics.renderTime < 50 && (
-                <li>• 🎉 Great! Data loaded from React Query cache (zero API calls)</li>
+                <li className="inline-flex items-center gap-1">
+                  • <SparklesIcon className="h-3 w-3 text-yellow-400" /> Great! Data loaded from React Query cache (zero API calls)
+                </li>
               )}
               {metrics.apiCalls > 5 && (
                 <li>• Too many API calls - React Query should cache this better</li>
@@ -154,25 +208,25 @@ export function DebugBar() {
           <div className="mt-4 flex gap-2">
             <button
               onClick={() => router.refresh()}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs"
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs inline-flex items-center gap-1"
             >
-              🔄 Refresh Data
+              <ArrowPathIcon className="h-3 w-3" /> Refresh Data
             </button>
             <button
               onClick={() => console.table({ ...metrics, route: pathname })}
-              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs"
+              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-xs inline-flex items-center gap-1"
             >
-              📊 Log Metrics
+              <ChartBarIcon className="h-3 w-3" /> Log Metrics
             </button>
             <button
               onClick={() => {
-                console.log('📍 Route:', pathname)
-                console.log('📊 Metrics:', metrics)
-                console.log('💾 Memory:', (performance as any).memory)
+                console.log('Route:', pathname)
+                console.log('Metrics:', metrics)
+                console.log('Memory:', (performance as any).memory)
               }}
-              className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs"
+              className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs inline-flex items-center gap-1"
             >
-              🔍 Debug Info
+              <MagnifyingGlassIcon className="h-3 w-3" /> Debug Info
             </button>
           </div>
         </div>
