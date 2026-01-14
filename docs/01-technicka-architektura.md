@@ -2,132 +2,152 @@
 
 ## Prehľad architektúry
 
-Systém beží v Docker kontajneroch s port mappingom v rozsahu 56xx:
+### Lokálny development
 - **5600**: Next.js aplikácia (frontend + backend API)
-- **5601**: PostgreSQL databáza
-- **5602**: Adminer (DB admin rozhranie)
+- **5601**: SSH tunnel na produkčnú PostgreSQL databázu (remote server port 5433)
 
-## Docker Compose štruktúra
+### Production server (vk.retry.sk)
+- **Server:** DigitalOcean 165.22.95.150
+- **Webserver:** Nginx (HTTPS reverse proxy)
+- **Backend:** Next.js (port 3000, managed by PM2)
+- **Databáza:** PostgreSQL (Docker container, port 5433)
+- **Process Manager:** PM2
+
+## Produkčná architektúra
 
 ```
-┌─────────────────────────────────────────────┐
-│         Docker Network: vk-network          │
-│                                             │
-│  ┌──────────────┐  ┌──────────────┐         │
-│  │  Next.js App │  │  PostgreSQL  │         │
-│  │   (Port:     │◄─┤   (Port:     │         │
-│  │    5600)     │  │    5601)     │         │
-│  └──────┬───────┘  └──────────────┘         │
-│         │                                   │
-│         │          ┌──────────────┐         │
-│         └─────────►│   Adminer    │         │
-│                    │   (Port:     │         │
-│                    │    5602)     │         │
-│                    └──────────────┘         │
-│                                             │
-└─────────────────────────────────────────────┘
-         │                    │
-         ▼                    ▼
-   Host: localhost:5600  Host: localhost:5602
+┌─────────────────────────────────────────────────────────┐
+│           DigitalOcean Server (165.22.95.150)           │
+│                                                         │
+│  ┌─────────────┐       ┌──────────────────┐             │
+│  │   Nginx     │       │   PM2 Process    │             │
+│  │   (HTTPS)   │──────►│   Next.js App    │             │
+│  │   Port 443  │       │   Port 3000      │             │
+│  └─────────────┘       └─────────┬────────┘             │
+│                                  │                      │
+│                                  ▼                      │
+│                        ┌──────────────────┐             │
+│                        │  PostgreSQL      │             │
+│                        │  (Docker)        │             │
+│                        │  Port 5433       │             │
+│                        └──────────────────┘             │
+└─────────────────────────────────────────────────────────┘
+         ▲
+         │ SSH Tunnel (local dev)
+         │
+┌────────┴───────────────────────┐
+│   Local Development            │
+│   localhost:5601 → :5433       │
+│   Next.js dev server :5600     │
+└────────────────────────────────┘
 ```
 
-## Volume mapping
+## Deployment
 
-### Aplikačné volumes:
-- `./src:/app/src` - Hot reload pre vývoj
-- `./public/uploads:/app/public/uploads` - Lokálne úložisko súborov
-- `postgres_data:/var/lib/postgresql/data` - Perzistentné DB dáta
+### Development workflow
+```bash
+# Start local dev server
+npm run dev
 
-### Štruktúra úložiska súborov:
+# Run tests
+npm run test:backend
+npm run test:e2e
+
+# Database migrations
+npx prisma migrate dev
+npx prisma generate
 ```
-public/uploads/
-├── cv/
-│   ├── vk-2025-1234/
-│   │   ├── candidate-001/
-│   │   │   ├── cv.pdf
-│   │   │   ├── motivacny-list.pdf
-│   │   │   └── certifikaty/
-│   │   └── candidate-002/
-├── tests/
-│   └── vk-2025-1234/
-│       ├── candidate-001-test-results.json
-│       └── candidate-002-test-results.json
-└── generated-docs/
-    └── vk-2025-1234/
-        ├── sumarny-hodnotiaci-harok-001.pdf
-        ├── zaverecne-hodnotenie.pdf
-        └── zapisnica.pdf
+
+### Production deployment
+```bash
+# Deploy to production (vk.retry.sk)
+./scripts/deploy.sh
+
+# Deploy with auto-confirm
+./scripts/deploy.sh --yes
 ```
+
+**Deployment script (`scripts/deploy.sh`) kroky:**
+1. Kontrola git statusu
+2. Lokálny production build (`npm run build`)
+3. Vytvorenie zálohy na serveri
+4. Rsync kódu na server (vrátane `.next/`)
+5. Inštalácia dependencies (`npm ci --production`)
+6. Spustenie migrations (`npx prisma migrate deploy`)
+7. Reštart PM2 (`pm2 reload vk-retry`)
+8. Health check
+9. Smoke tests
 
 ## Environment Variables
 
 ### Development (.env.local):
 ```env
-# Database
-DATABASE_URL="postgresql://vkadmin:vkpass123@localhost:5601/vk_system"
+# Database (SSH tunnel to production)
+DATABASE_URL="postgresql://vkretry:vkretry123@localhost:5601/vk_retry"
 
-# NextAuth
+# Auth.js
+AUTH_SECRET="your-secret-key-min-32-chars-long"
 NEXTAUTH_URL="http://localhost:5600"
-NEXTAUTH_SECRET="your-secret-key-min-32-chars-long-12345"
 
 # Application
 NODE_ENV="development"
-UPLOAD_DIR="/app/public/uploads"
-MAX_FILE_SIZE=10485760  # 10MB
-
-# Email (simulované v dev)
-EMAIL_FROM="vk-system@mirri.gov.sk"
-EMAIL_SIMULATE=true
-
-# OTP (simulované v dev)
-OTP_SIMULATE=true
-OTP_EXPIRY_MINUTES=5
+NEXT_PUBLIC_APP_URL="http://localhost:5600"
 ```
 
-### Production (.env.production):
+### Production (.env.production - server):
 ```env
-DATABASE_URL="postgresql://..."
-NEXTAUTH_URL="https://vk.mirri.gov.sk"
-NEXTAUTH_SECRET="strong-production-secret"
+# Database (local Docker container)
+DATABASE_URL="postgresql://vkretry:vkretry123@localhost:5433/vk_retry"
+
+# Auth.js
+AUTH_SECRET="production-secret-generated-with-openssl"
+NEXTAUTH_URL="https://vk.retry.sk"
+
+# Application
 NODE_ENV="production"
-EMAIL_SIMULATE=false
-OTP_SIMULATE=false
-# ... ďalšie produkčné nastavenia
+NEXT_PUBLIC_APP_URL="https://vk.retry.sk"
 ```
 
 ## Sieťová architektúra
 
 ### Lokálny vývoj:
 ```
-http://localhost:5600           → Next.js App
-http://localhost:5601           → PostgreSQL (TCP)
-http://localhost:5602           → Adminer Web UI
+http://localhost:5600           → Next.js Dev Server
+    ↓
+localhost:5601                  → SSH Tunnel → server:5433 (PostgreSQL)
 ```
 
-### Produkcia (neskôr):
+### Produkcia (vk.retry.sk):
 ```
-https://vk.mirri.gov.sk         → Nginx Reverse Proxy
+https://vk.retry.sk             → Nginx (HTTPS, port 443)
     ↓
-http://app:3000                 → Next.js App (internal)
+http://localhost:3000           → Next.js App (PM2)
     ↓
-postgresql://db:5432            → PostgreSQL (internal)
+localhost:5433                  → PostgreSQL (Docker)
+```
+
+### SSH Tunnel setup (local → production DB):
+```bash
+# Script: scripts/db-tunnel.sh
+ssh -i ~/.ssh/monitra_do -L 5601:localhost:5433 -N root@165.22.95.150
 ```
 
 ## Bezpečnostné vrstvy
 
 ### Development:
 - HTTP (localhost)
-- Základná autentifikácia
-- Session cookies (httpOnly)
+- Auth.js session management
+- Session cookies (httpOnly, secure)
 - CORS: localhost only
+- SSH tunnel pre DB prístup
 
-### Production:
+### Production (vk.retry.sk):
 - HTTPS (Let's Encrypt SSL)
 - Nginx reverse proxy
-- Rate limiting
-- Firewall rules
-- CORS: production domain only
-- Security headers (Helmet.js)
+- PM2 process management
+- SSH key authentication (deploy user)
+- Database isolated v Docker kontajneri
+- Auth.js with production secrets
 
 ## Scaling stratégia (budúcnosť)
 
@@ -146,37 +166,50 @@ Load Balancer
 
 ## Backup stratégia
 
-### Automatické zálohy DB:
+### PM2 zálohy pred deploymentom:
 ```bash
-# Denne o 02:00
-0 2 * * * docker exec vk-postgres pg_dump -U vkadmin vk_system > /backups/vk_$(date +\%Y\%m\%d).sql
+# Automaticky v deployment scripte
+BACKUP_NAME="/var/www/vk-retry-backup-$(date +%Y%m%d-%H%M%S)"
+cp -r /var/www/vk-retry "$BACKUP_NAME"
+
+# Keep only last 5 backups
+ls -dt vk-retry-backup-* | tail -n +6 | xargs -r rm -rf
 ```
 
-### Záloha súborov:
+### Database zálohy:
 ```bash
-# Denne o 03:00
-0 3 * * * tar -czf /backups/uploads_$(date +\%Y\%m\%d).tar.gz /app/public/uploads
+# Manual backup
+docker exec vk-postgres pg_dump -U vkretry vk_retry > backup.sql
+
+# TODO: Automatické cronjob zálohy
 ```
 
-## Monitoring (produkcia)
+## Monitoring
 
-- **Health checks**: `/api/health` endpoint
-- **Logs**: Docker logs + winston logger
-- **Metrics**: Next.js built-in analytics
-- **Uptime monitoring**: External service (napr. UptimeRobot)
+### Production:
+- **PM2 monitoring**: `pm2 status`, `pm2 logs vk-retry`
+- **Process restart**: PM2 automatic restart on crash
+- **Logs**: `/home/deploy/.pm2/logs/`
+- **Health check**: Deployment script curl test
 
-## CI/CD Pipeline (neskôr)
+### Užitočné príkazy:
+```bash
+# SSH do servera
+ssh -i ~/.ssh/monitra_do deploy@165.22.95.150
 
+# PM2 status
+pm2 status
+pm2 logs vk-retry
+pm2 restart vk-retry
+
+# Nginx
+sudo systemctl status nginx
+sudo nginx -t
+sudo systemctl reload nginx
 ```
-Git Push → GitHub Actions
-    ↓
-  Build Docker Image
-    ↓
-  Run Tests
-    ↓
-  Deploy to Staging
-    ↓
-  Manual Approval
-    ↓
-  Deploy to Production
-```
+
+## CI/CD
+
+**Aktuálne:** Manuálny deployment cez `./scripts/deploy.sh`
+
+**Budúcnosť:** GitHub Actions automation

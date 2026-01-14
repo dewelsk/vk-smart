@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 
 export default function HomePage() {
-  // Redirect na admin login
-  redirect('/admin/login')
+  // Natvrdo redirect na dashboard
+  // Middleware sa postará o autentifikáciu
+  redirect('/dashboard')
 }

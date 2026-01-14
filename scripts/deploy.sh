@@ -1,7 +1,10 @@
 #!/bin/bash
 
 # Production Deployment Script for vk.retry.sk
-# Usage: ./scripts/deploy.sh
+# Usage: ./scripts/deploy.sh [--yes]
+#
+# Options:
+#   --yes    Skip confirmation prompts (non-interactive mode)
 #
 # This script builds the application locally and syncs the built .next/ directory
 # to avoid build issues on the production server.
@@ -12,6 +15,12 @@ set -e  # Exit on error
 SERVER="deploy@165.22.95.150"
 APP_DIR="/var/www/vk-retry"
 SSH_KEY="~/.ssh/monitra_do"
+
+# Parse arguments
+AUTO_CONFIRM=false
+if [ "$1" = "--yes" ] || [ "$1" = "-y" ]; then
+    AUTO_CONFIRM=true
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -46,11 +55,15 @@ echo ""
 echo "Server: $SERVER"
 echo "Target: $APP_DIR"
 echo ""
-read -p "Deploy to PRODUCTION? (yes/no): " confirm
 
-if [ "$confirm" != "yes" ]; then
-    log_error "Deployment cancelled"
-    exit 1
+if [ "$AUTO_CONFIRM" = false ]; then
+    read -p "Deploy to PRODUCTION? (yes/no): " confirm
+    if [ "$confirm" != "yes" ]; then
+        log_error "Deployment cancelled"
+        exit 1
+    fi
+else
+    log_info "Auto-confirm enabled (--yes flag)"
 fi
 
 echo ""
@@ -63,10 +76,14 @@ if [[ -n $(git status -s) ]]; then
     log_warning "You have uncommitted changes!"
     git status -s
     echo ""
-    read -p "Continue anyway? (yes/no): " continue_dirty
-    if [ "$continue_dirty" != "yes" ]; then
-        log_error "Deployment cancelled"
-        exit 1
+    if [ "$AUTO_CONFIRM" = false ]; then
+        read -p "Continue anyway? (yes/no): " continue_dirty
+        if [ "$continue_dirty" != "yes" ]; then
+            log_error "Deployment cancelled"
+            exit 1
+        fi
+    else
+        log_warning "Continuing with uncommitted changes (auto-confirm)"
     fi
 fi
 
@@ -75,19 +92,7 @@ CURRENT_COMMIT=$(git rev-parse --short HEAD)
 log_success "Git: $CURRENT_BRANCH @ $CURRENT_COMMIT"
 echo ""
 
-# Step 2: Build locally
-log_info "Building application locally..."
-NODE_ENV=production npm run build
-
-if [ ! -f ".next/BUILD_ID" ]; then
-    log_error "Build failed - .next/BUILD_ID not found"
-    exit 1
-fi
-
-log_success "Build successful"
-echo ""
-
-# Step 3: Create backup on server
+# Step 2: Create backup on server
 log_info "Creating backup on server..."
 ssh -i "$SSH_KEY" "$SERVER" << 'ENDSSH'
 if [ -d "/var/www/vk-retry/.next" ]; then
@@ -105,10 +110,11 @@ ENDSSH
 log_success "Backup created"
 echo ""
 
-# Step 4: Rsync code to server (including .next/)
+# Step 3: Rsync code to server (excluding .next/ - will build on server)
 log_info "Syncing code to server..."
 rsync -avz --delete \
     --exclude 'node_modules' \
+    --exclude '.next' \
     --exclude '.git' \
     --exclude 'test-results' \
     --exclude 'playwright-report' \
@@ -118,11 +124,11 @@ rsync -avz --delete \
     -e "ssh -i $SSH_KEY" \
     ./ "$SERVER:$APP_DIR/"
 
-log_success "Code synced (including .next/)"
+log_success "Code synced"
 echo ""
 
-# Step 5: Install dependencies and restart on server
-log_info "Installing production dependencies..."
+# Step 4: Build and deploy on server
+log_info "Building and deploying on server..."
 ssh -i "$SSH_KEY" "$SERVER" << 'ENDSSH'
 set -e
 cd /var/www/vk-retry
@@ -132,8 +138,8 @@ set -a
 source .env.production
 set +a
 
-echo "📦 Installing dependencies..."
-npm ci --production
+echo "📦 Installing all dependencies (including devDependencies for build)..."
+npm install
 
 echo "🔨 Generating Prisma client..."
 npx prisma generate
@@ -141,8 +147,12 @@ npx prisma generate
 echo "🗃️  Running database migrations..."
 npx prisma migrate deploy
 
-echo "🔄 Reloading PM2..."
-pm2 reload vk-retry --update-env
+echo "🏗️  Building Next.js application..."
+npm run build
+
+echo "🔄 Restarting PM2 with production build..."
+pm2 delete vk-retry || true
+pm2 start npm --name "vk-retry" -- start
 
 echo "💾 Saving PM2 configuration..."
 pm2 save

@@ -23,20 +23,17 @@
 
 ### UI & Styling
 
-**IDSK Dizajn systém (Možnosť A):**
-```bash
-npm install @id-sk/frontend
-```
+- **TailwindCSS** `^3.4.0` - Utility-first CSS framework
+- **Heroicons** `@heroicons/react` - SVG ikony
+- **react-hot-toast** - Toast notifikácie
+- **clsx** - Podmienené class names
+- **tailwind-merge** - Merging Tailwind classes
 
-**Wrapper komponenty:**
-- Vytvoríme vlastné React komponenty v `src/components/idsk/`
-- Použijeme IDSK CSS classes
-- TypeScript interfaces pre props
-
-**Doplnkové styling:**
-- **TailwindCSS** `^3.4.0` - pre custom styling mimo IDSK
-- **clsx** - podmienené class names
-- **tailwind-merge** - merging Tailwind classes
+**Custom komponenty:**
+- `components/admin/` - Admin layout komponenty
+- `components/ConfirmModal.tsx` - Reusable confirm dialog
+- `components/ErrorBoundary.tsx` - Error handling
+- Konzistentný dizajn tlačidiel a formulárov
 
 ### Forms & Validation
 
@@ -149,15 +146,17 @@ model User {
 
 ### Autentifikácia
 
-- **NextAuth.js v5** `^5.0.0-beta`
+- **Auth.js (NextAuth v5)** `next-auth@5.0.0-beta.25`
   - Credentials provider
   - Session management
   - JWT tokens
   - Middleware protection
+  - Multi-role support (SUPERADMIN, ADMIN, GESTOR, KOMISIA, CANDIDATE)
 
 - **bcryptjs** `^2.4.3`
   - Password hashing
   - Salt rounds: 10
+  - Používa sa pre User aj Candidate heslá
 
 ### OTP Simulácia (MVP)
 
@@ -236,27 +235,47 @@ logger.info('User login', {
 }
 ```
 
-### Testing (Voliteľné pre MVP)
+### Testing
 
-- **Vitest** - Unit tests
-- **Testing Library** - Component tests
-- **Playwright** - E2E tests (neskôr)
+- **Vitest** `^2.1.8` - Backend API unit tests
+  - `tests/backend/` - API route tests
+  - Test setup v `vitest.config.ts`
+
+- **Playwright** `^1.48.2` - E2E tests
+  - `tests/e2e/` - Full user flow tests
+  - `tests/e2e/smoke/` - Production smoke tests
+  - Multi-browser support (Chromium, Firefox, WebKit)
+
+- **Testing best practices:**
+  - `data-testid` attributes namiesto text selectors
+  - Helper functions v `tests/helpers/`
+  - Shared patterns across all tests
 
 ## DevOps
 
-### Docker
+### Production Server
 
-- **Docker** `^24.0.0`
-- **Docker Compose** `^2.23.0`
+- **DigitalOcean** - Cloud hosting (165.22.95.150)
+- **PM2** - Process manager pre Node.js
+- **Nginx** - Reverse proxy, HTTPS
+- **Docker** - PostgreSQL databáza (port 5433)
+- **Let's Encrypt** - SSL certifikáty
+
+### Deployment
+
+- **Script:** `scripts/deploy.sh`
+- **Process:** Local build → Rsync → PM2 reload
+- **SSH:** Key-based authentication (`~/.ssh/monitra_do`)
+- **Backups:** Automatické pred každým deploymentom
 
 ### Version Control
 
 - **Git**
-- **GitHub** - Repository + Issues
+- **GitHub** - Repository
 
 ### Package Manager
 
-- **npm** `^10.0.0` (alebo pnpm)
+- **npm** `^10.0.0`
 
 ## Verzie Dependencies (package.json)
 
@@ -266,16 +285,23 @@ logger.info('User login', {
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@id-sk/frontend": "^2.11.0",
-    "next-auth": "^5.0.0-beta",
+    "next-auth": "^5.0.0-beta.22",
+    "@auth/prisma-adapter": "^2.10.0",
     "@prisma/client": "^5.20.0",
-    "react-hook-form": "^7.53.0",
-    "zod": "^3.23.0",
     "@tanstack/react-query": "^5.56.0",
+    "@tanstack/react-table": "^8.21.3",
+    "@heroicons/react": "^2.2.0",
+    "react-hook-form": "^7.53.0",
+    "@hookform/resolvers": "^5.2.2",
+    "zod": "^3.23.0",
     "bcryptjs": "^2.4.3",
     "date-fns": "^3.6.0",
-    "@react-pdf/renderer": "^3.4.0",
-    "winston": "^3.14.0",
+    "react-datepicker": "^8.7.0",
+    "react-select": "^5.10.2",
+    "react-dropzone": "^14.3.8",
+    "react-hot-toast": "^2.6.0",
+    "puppeteer": "^23.3.0",
+    "mammoth": "^1.11.0",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.5.0"
   },
@@ -283,12 +309,25 @@ logger.info('User login', {
     "typescript": "^5.5.0",
     "@types/react": "^18.3.0",
     "@types/node": "^20.16.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/react-datepicker": "^6.2.0",
+    "@types/react-dom": "^18.3.0",
     "prisma": "^5.20.0",
     "eslint": "^8.57.0",
-    "prettier": "^3.3.0",
+    "eslint-config-next": "^14.2.0",
     "tailwindcss": "^3.4.0",
     "autoprefixer": "^10.4.0",
-    "postcss": "^8.4.0"
+    "postcss": "^8.4.0",
+    "@playwright/test": "^1.55.1",
+    "vitest": "^2.1.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/jest-dom": "^6.5.0",
+    "@tanstack/react-query-devtools": "^5.90.2",
+    "happy-dom": "^15.7.0",
+    "msw": "^2.4.0",
+    "tsx": "^4.19.0"
   }
 }
 ```

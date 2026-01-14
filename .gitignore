@@ -46,3 +46,10 @@ public/uploads/*
 
 # docker
 .dockerignore
+
+# IDE
+.idea
+
+# test results
+test-results
+playwright-report
