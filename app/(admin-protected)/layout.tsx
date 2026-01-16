@@ -1,7 +1,6 @@
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
-import Header from '@/components/admin/Header'
-import Sidebar from '@/components/admin/Sidebar'
+import TopNavigation from '@/components/admin/TopNavigation'
 
 export default async function AdminLayout({
   children,
@@ -22,10 +21,9 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <Header session={session} />
-      <Sidebar session={session} />
-      <main className="p-8 md:ml-64 transition-all duration-300">{children}</main>
+    <div className="min-h-screen bg-gray-50">
+      <TopNavigation session={session} />
+      <main className="transition-all duration-300">{children}</main>
     </div>
   )
 }

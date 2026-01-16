@@ -173,6 +173,8 @@ export const authConfig: NextAuthConfig = {
           token.role = user.role
           token.roles = user.roles
           token.type = 'user'
+          token.name = user.name
+          token.surname = user.surname
         }
       }
       return token
@@ -195,6 +197,8 @@ export const authConfig: NextAuthConfig = {
             role: UserRole
           }>
           session.user.type = 'user'
+          session.user.name = token.name as string
+          session.user.surname = token.surname as string
         }
 
         // Temporary role switching (for both types)

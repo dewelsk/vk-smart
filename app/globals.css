@@ -1,10 +1,31 @@
+@import url('https://api.fontshare.com/v2/css?f[]=general-sans@500,600,700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --font-general-sans: 'General Sans', sans-serif;
+  --font-inter: 'Inter', sans-serif;
+
+  /* Design system colors */
+  --color-black-100: #2A222B;
+  --color-black-30: #BFBDBF;
+  --color-grey-50: #F4F3F5;
+  --color-grey-40: #F7F7F8;
+  --color-white: #FFFFFF;
+  --color-purple-80: #504EDD;
+  --color-purple-10: #EDEDFC;
+  --color-green: #3DAC67;
+  --color-green-light: #9EE2B5;
+  --color-red: #B93429;
+  --color-red-light: #FDC5BB;
+}
+
 body {
-  color: #111827;
-  background: #ffffff;
+  color: var(--color-black-100);
+  background: var(--color-grey-40);
+  font-family: var(--font-inter);
 }
 
 /* Force dark text in inputs */

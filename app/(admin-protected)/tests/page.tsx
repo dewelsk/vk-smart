@@ -4,49 +4,41 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import Select from 'react-select'
-import { DataTable } from '@/components/table/DataTable'
-import { PageHeader } from '@/components/PageHeader'
-import { PlusIcon, MagnifyingGlassIcon, TrashIcon } from '@heroicons/react/24/outline'
-import type { ColumnDef } from '@tanstack/react-table'
-import { useTests, useDeleteTest, type Test } from '@/hooks/useTests'
+import { PlusIcon, MagnifyingGlassIcon, DocumentDuplicateIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { Pagination } from '@/components/Pagination'
+import { useTests, type Test } from '@/hooks/useTests'
 import { useTestTypes } from '@/hooks/useTestTypes'
-import { ConfirmModal } from '@/components/ConfirmModal'
-import { toast } from 'react-hot-toast'
 
 type TestTypeOption = {
   value: string
   label: string
 }
 
-function getQuestionWord(count: number) {
-  if (count === 1) return 'otázka'
-  if (count >= 2 && count <= 4) return 'otázky'
-  return 'otázok'
-}
+// Status badge podľa Figma dizajnu
+function getStatusBadge(approved: boolean | null, isPublished?: boolean) {
+  // Logika: approved=true -> Schválený, approved=false -> Neschválený, approved=null -> Rozpracovaný
+  // Môžeme rozšíriť o "Čaká na schválenie" ak bude potrebné
 
-function getTestTypeBadge(testType: { id: string; name: string } | null) {
-  if (!testType) {
+  if (approved === true) {
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-        Neurčený
+      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-[10px] text-xs font-medium bg-[#E6FBEA] text-[#125F52] min-w-[120px]">
+        Schválený
       </span>
     )
   }
 
-  // Dynamické farby podľa názvu typu
-  let colorClass = 'bg-gray-100 text-gray-800'
-  const name = testType.name.toLowerCase()
+  if (approved === false) {
+    return (
+      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-[10px] text-xs font-medium bg-[#FBF5F4] text-[#B93429] min-w-[120px]">
+        Neschválený
+      </span>
+    )
+  }
 
-  if (name.includes('odborn')) colorClass = 'bg-purple-100 text-purple-800'
-  else if (name.includes('všeobecn')) colorClass = 'bg-blue-100 text-blue-800'
-  else if (name.includes('štátn') || name.includes('jazyk')) colorClass = 'bg-green-100 text-green-800'
-  else if (name.includes('cudz') || name.includes('anglick')) colorClass = 'bg-orange-100 text-orange-800'
-  else if (name.includes('it') || name.includes('počítač')) colorClass = 'bg-cyan-100 text-cyan-800'
-  else if (name.includes('schopnos') || name.includes('vlastnos')) colorClass = 'bg-pink-100 text-pink-800'
-
+  // Default: Rozpracovaný (null alebo undefined)
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}`}>
-      {testType.name}
+    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-[10px] text-xs font-medium bg-[#F4F3F5] text-[#554E55] min-w-[120px]">
+      Rozpracovaný
     </span>
   )
 }
@@ -59,12 +51,9 @@ export default function TestsPage() {
   const [approvedFilter, setApprovedFilter] = useState<'all' | boolean>('all')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deletingTest, setDeletingTest] = useState<Test | null>(null)
 
   // Fetch test types for filter
   const { data: testTypesData } = useTestTypes({ limit: 100 })
-  const deleteTestMutation = useDeleteTest()
 
   // Debounce search input
   useEffect(() => {
@@ -82,7 +71,7 @@ export default function TestsPage() {
   }, [typeFilter, approvedFilter])
 
   // Use React Query hook
-  const { data, isLoading, isFetching, error } = useTests({
+  const { data, isLoading } = useTests({
     search: debouncedSearch,
     testTypeId: typeFilter?.value,
     approved: approvedFilter,
@@ -104,165 +93,42 @@ export default function TestsPage() {
     pageSize: data?.limit ?? 10,
   }
 
-  const handleDeleteClick = (test: Test) => {
-    setDeletingTest(test)
-    setShowDeleteModal(true)
-  }
-
-  const handleDeleteConfirm = async () => {
-    if (!deletingTest) return
-
-    try {
-      await deleteTestMutation.mutateAsync(deletingTest.id)
-      toast.success('Test bol úspešne vymazaný')
-      setShowDeleteModal(false)
-      setDeletingTest(null)
-    } catch (error: any) {
-      toast.error(error.message || 'Nepodarilo sa vymazať test')
-    }
-  }
-
-  // Column definitions
-  const columns: ColumnDef<Test>[] = [
-    {
-      accessorKey: 'name',
-      header: 'Názov',
-      cell: ({ row }) => (
-        <Link
-          href={`/tests/${row.original.id}`}
-          className="font-medium text-blue-600 hover:text-blue-800"
-        >
-          {row.original.name}
-        </Link>
-      ),
-    },
-    {
-      accessorKey: 'testType',
-      header: 'Typ testu',
-      cell: ({ row }) => getTestTypeBadge(row.original.testType),
-    },
-    {
-      accessorKey: 'testTypeCondition',
-      header: 'Podmienky',
-      cell: ({ row }) => {
-        if (!row.original.testTypeCondition) {
-          return <span className="text-gray-400">-</span>
-        }
-        return (
-          <span className="text-sm text-gray-700">
-            {row.original.testTypeCondition.name}
-          </span>
-        )
-      },
-    },
-    {
-      accessorKey: 'questionCount',
-      header: 'Otázky',
-      cell: ({ row }) => `${row.original.questionCount} ${getQuestionWord(row.original.questionCount)}`,
-    },
-    {
-      accessorKey: 'recommendedDuration',
-      header: 'Trvanie',
-      cell: ({ row }) => row.original.recommendedDuration ? `${row.original.recommendedDuration} min` : '-',
-    },
-    {
-      accessorKey: 'recommendedScore',
-      header: 'Úspešnosť',
-      cell: ({ row }) => row.original.recommendedScore ? `${row.original.recommendedScore}%` : '-',
-    },
-    {
-      accessorKey: 'usage',
-      header: 'Použitie',
-      cell: ({ row }) => {
-        const { usage } = row.original
-        if (usage.totalVKs === 0) return <span className="text-gray-500">-</span>
-
-        if (usage.hasActiveUsage) {
-          return (
-            <span className="text-green-600 font-medium">
-              🟢 {usage.totalVKs} VK {usage.activeVKs > 0 && `(${usage.activeVKs} aktívne)`}
-            </span>
-          )
-        }
-
-        return (
-          <span className="text-yellow-600">
-            🟡 {usage.totalVKs} VK
-          </span>
-        )
-      },
-    },
-    {
-      accessorKey: 'author',
-      header: 'Autor',
-      cell: ({ row }) => row.original.author ? `${row.original.author.name} ${row.original.author.surname}` : '-',
-    },
-    {
-      accessorKey: 'approved',
-      header: 'Stav',
-      cell: ({ row }) => (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-          row.original.approved
-            ? 'bg-green-100 text-green-800'
-            : 'bg-yellow-100 text-yellow-800'
-        }`}>
-          {row.original.approved ? '✅ Schválený' : '⏳ Koncept'}
-        </span>
-      ),
-    },
-    {
-      id: 'actions',
-      header: 'Akcie',
-      cell: ({ row }) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation() // Prevent row click navigation
-            handleDeleteClick(row.original)
-          }}
-          className="text-red-600 hover:text-red-800 p-2 rounded-md hover:bg-red-50 transition-colors"
-          title="Vymazať test"
-        >
-          <TrashIcon className="h-5 w-5" />
-        </button>
-      ),
-    },
-  ]
-
   return (
-    <div data-testid="tests-page" className="space-y-6">
-      <PageHeader
-        title="Testy"
-        description="Pool hotových testov pre výberové konania"
-        actions={
-          <Link
-            href="/tests/new"
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-            Vytvoriť test
-          </Link>
-        }
-      />
+    <div data-testid="tests-page" className="flex flex-col h-[calc(100vh-56px)] bg-ds-grey-40 p-6 gap-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <DocumentDuplicateIcon className="h-7 w-7 text-[#3F3840]" />
+          <h1 className="text-[28px] font-medium text-[#3F3840] font-heading">Testy</h1>
+        </div>
+        <Link
+          href="/tests/new"
+          className="inline-flex items-center gap-2 px-4 py-2.5 border border-ds-purple-80 bg-ds-purple-10 text-[#302F85] rounded-[10px] text-sm font-medium hover:bg-ds-purple-80 hover:text-white transition-colors"
+        >
+          <PlusIcon className="h-5 w-5" aria-hidden="true" />
+          Vytvoriť nový test
+        </Link>
+      </div>
 
       {/* Filters */}
-      <div className="bg-white shadow rounded-lg p-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 flex-1">
           {/* Search */}
-          <div className="relative">
+          <div className="relative flex-1 max-w-md">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+              <MagnifyingGlassIcon className="h-5 w-5 text-[#6A646B]" aria-hidden="true" />
             </div>
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Hľadať test podľa názvu..."
+              className="block w-full pl-10 pr-3 py-2.5 border border-[#EAE9EA] rounded-[10px] bg-white text-sm placeholder-[#6A646B] focus:outline-none focus:ring-1 focus:ring-ds-purple-80 focus:border-ds-purple-80"
+              placeholder="Vyhľadávať"
             />
           </div>
 
           {/* Type filter */}
-          <div>
+          <div className="w-48">
             <Select
               isClearable
               placeholder="Všetky typy"
@@ -270,6 +136,15 @@ export default function TestsPage() {
               onChange={(option) => setTypeFilter(option)}
               options={testTypeOptions}
               className="text-sm"
+              styles={{
+                control: (base) => ({
+                  ...base,
+                  borderColor: '#EAE9EA',
+                  borderRadius: '10px',
+                  minHeight: '42px',
+                  '&:hover': { borderColor: '#EAE9EA' },
+                }),
+              }}
             />
           </div>
 
@@ -281,66 +156,140 @@ export default function TestsPage() {
                 const value = e.target.value
                 setApprovedFilter(value === 'all' ? 'all' : value === 'true')
               }}
-              className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+              className="block w-full pl-3 pr-10 py-2.5 border border-[#EAE9EA] rounded-[10px] bg-white text-sm text-[#554E55] focus:outline-none focus:ring-1 focus:ring-ds-purple-80 focus:border-ds-purple-80"
             >
-              <option value="all">Všetky</option>
+              <option value="all">Všetky stavy</option>
               <option value="true">Schválené</option>
               <option value="false">Neschválené</option>
             </select>
           </div>
         </div>
+
+        {/* Sort dropdown */}
+        <div className="flex items-center gap-2">
+          <select
+            className="block pl-4 pr-10 py-2.5 border border-[#EAE9EA] rounded-[10px] bg-white text-sm text-[#554E55] focus:outline-none focus:ring-1 focus:ring-ds-purple-80 focus:border-ds-purple-80"
+          >
+            <option>Zoradiť od najnovších</option>
+            <option>Zoradiť od najstarších</option>
+            <option>Podľa názvu A-Z</option>
+            <option>Podľa názvu Z-A</option>
+          </select>
+        </div>
       </div>
 
-      {/* Table or Empty state */}
-      {isLoading ? (
-        <div className="bg-white p-12 rounded-lg shadow text-center">
-          <div className="text-gray-500">Načítavam...</div>
-        </div>
-      ) : tests.length === 0 ? (
-        <div className="text-center py-12 bg-white shadow rounded-lg">
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Žiadne testy</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Zatiaľ neboli vytvorené žiadne testy.
-          </p>
-          <div className="mt-6">
-            <Link
-              href="/tests/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            >
-              <PlusIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-              Vytvoriť test
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-white shadow rounded-lg">
-          <DataTable
-            columns={columns}
-            data={tests}
-            loading={isLoading}
-            pagination={pagination}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size)
-              setPage(1)
-            }}
-            onRowClick={(row) => router.push(`/tests/${row.id}`)}
-          />
-        </div>
-      )}
+      {/* Divider */}
+      <div className="border-t border-[#EAE9EA]" />
 
-      {/* Delete Confirmation Modal */}
-      <ConfirmModal
-        isOpen={showDeleteModal}
-        title="Vymazať test"
-        message={`Naozaj chcete vymazať test "${deletingTest?.name}"? Táto akcia je nevratná.`}
-        variant="danger"
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => {
-          setShowDeleteModal(false)
-          setDeletingTest(null)
-        }}
-      />
+      {/* Table or Empty state */}
+      <div className="flex-1 overflow-auto">
+        {isLoading ? (
+          <div className="bg-white p-12 rounded-[15px] shadow-sm text-center">
+            <div className="text-[#6A646B]">Načítavam...</div>
+          </div>
+        ) : tests.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-[15px] shadow-sm">
+            <h3 className="mt-2 text-sm font-medium text-[#3F3840]">Žiadne testy</h3>
+            <p className="mt-1 text-sm text-[#6A646B]">
+              Zatiaľ neboli vytvorené žiadne testy.
+            </p>
+            <div className="mt-6">
+              <Link
+                href="/tests/new"
+                className="inline-flex items-center gap-2 px-4 py-2.5 border border-ds-purple-80 bg-ds-purple-10 text-[#302F85] rounded-[10px] text-sm font-medium hover:bg-ds-purple-80 hover:text-white transition-colors"
+              >
+                <PlusIcon className="h-5 w-5" aria-hidden="true" />
+                Vytvoriť nový test
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {/* Header riadok */}
+            <div className="px-6 py-2 flex items-center text-sm text-[#6A646B]">
+              <div className="flex-[2] min-w-0">Druh testu</div>
+              <div className="flex-[1.5] min-w-0">Typ testu</div>
+              <div className="flex-1 text-center">Počet otázok</div>
+              <div className="flex-1 text-center">Bodovanie</div>
+              <div className="flex-1 text-center">Čas</div>
+              <div className="flex-[1.5] min-w-0">Gestor</div>
+              <div className="flex-[1.2] min-w-0">Stav</div>
+              <div className="flex-1 text-center">Použitie</div>
+              <div className="w-6"></div>
+            </div>
+
+            {tests.map((test) => (
+              <div
+                key={test.id}
+                onClick={() => router.push(`/tests/${test.id}`)}
+                className="bg-white border border-[#EAE9EA] rounded-[10px] shadow-[0px_8px_25px_0px_rgba(42,34,43,0.07)] px-6 py-3 flex items-center cursor-pointer hover:border-ds-black-30 transition-colors"
+              >
+                {/* Druh testu */}
+                <div className="flex-[2] min-w-0">
+                  <span className="font-medium text-[#3F3840] truncate block">{test.name}</span>
+                </div>
+
+                {/* Typ testu */}
+                <div className="flex-[1.5] min-w-0">
+                  <span className="text-sm text-[#554E55] truncate block">{test.testType?.name || '-'}</span>
+                </div>
+
+                {/* Počet otázok */}
+                <div className="flex-1 flex justify-center">
+                  <span className="inline-flex items-center justify-center px-2 py-1 border border-[#EAE9EA] rounded-[5px] text-[#3F3840] font-medium text-sm min-w-[40px]">
+                    {test.questionCount}
+                  </span>
+                </div>
+
+                {/* Bodovanie */}
+                <div className="flex-1 flex justify-center">
+                  <span className="inline-flex items-center justify-center px-2 py-1 border border-[#EAE9EA] rounded-[5px] text-[#3F3840] font-medium text-sm min-w-[40px]">
+                    0,5b
+                  </span>
+                </div>
+
+                {/* Čas */}
+                <div className="flex-1 flex justify-center">
+                  <span className="inline-flex items-center justify-center px-2 py-1 border border-[#EAE9EA] rounded-[5px] text-[#3F3840] font-medium text-sm min-w-[50px]">
+                    {test.recommendedDuration ? `${test.recommendedDuration}min` : '60min'}
+                  </span>
+                </div>
+
+                {/* Gestor */}
+                <div className="flex-[1.5] min-w-0">
+                  <span className="text-[#2A222B] underline text-sm truncate block">
+                    {test.author ? `${test.author.name} ${test.author.surname}` : '-'}
+                  </span>
+                </div>
+
+                {/* Stav */}
+                <div className="flex-[1.2] min-w-0">
+                  {getStatusBadge(test.approved)}
+                </div>
+
+                {/* Použitie vo VK */}
+                <div className="flex-1 text-center">
+                  <span className="text-sm text-[#554E55]">
+                    {test.usage?.totalVKs || 0} VK
+                  </span>
+                </div>
+
+                {/* Arrow */}
+                <ChevronRightIcon className="h-5 w-5 text-[#6A646B] flex-shrink-0" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Pagination - podľa Figma */}
+      {!isLoading && tests.length > 0 && (
+        <Pagination
+          currentPage={page}
+          totalPages={pagination.totalPages}
+          onPageChange={setPage}
+        />
+      )}
     </div>
   )
 }

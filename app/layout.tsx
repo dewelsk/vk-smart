@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Roboto } from 'next/font/google'
+import { Inter } from 'next/font/google'
 import './globals.css'
 import dynamic from 'next/dynamic'
 import { Toaster } from 'react-hot-toast'
@@ -15,10 +15,11 @@ const DebugBar = dynamic(() => import('@/components/dev/DebugBar').then(mod => (
   ssr: false,
 })
 
-const roboto = Roboto({
-  weight: ['300', '400', '500', '700'],
+const inter = Inter({
+  weight: ['400', '500', '600', '700'],
   subsets: ['latin', 'latin-ext'],
   display: 'swap',
+  variable: '--font-inter',
 })
 
 export const metadata: Metadata = {
@@ -33,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="sk">
-      <body className={roboto.className}>
+      <body className={`${inter.className} ${inter.variable}`}>
         <ErrorBoundary>
           <ToastProvider>
             <Toaster position="top-right" />

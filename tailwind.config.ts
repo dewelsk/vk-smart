@@ -8,7 +8,33 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['var(--font-inter)', 'Inter', 'sans-serif'],
+        heading: ['General Sans', 'var(--font-inter)', 'sans-serif'],
+      },
       colors: {
+        // Design system colors
+        'ds-black': {
+          100: '#2A222B',
+          30: '#BFBDBF',
+        },
+        'ds-grey': {
+          50: '#F4F3F5',
+          40: '#F7F7F8',
+        },
+        'ds-white': '#FFFFFF',
+        'ds-purple': {
+          80: '#504EDD',
+          10: '#EDEDFC',
+        },
+        'ds-green': {
+          DEFAULT: '#3DAC67',
+          light: '#9EE2B5',
+        },
+        'ds-red': {
+          DEFAULT: '#B93429',
+          light: '#FDC5BB',
+        },
         // IDSK farby (pre budúce použitie)
         primary: {
           DEFAULT: '#0065B3',

@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || ''
     const gestorId = searchParams.get('gestorId') || ''
+    const dateFrom = searchParams.get('dateFrom') || ''
+    const dateTo = searchParams.get('dateTo') || ''
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const sortBy = searchParams.get('sortBy') || 'createdAt'
@@ -28,9 +30,28 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const where: any = {}
 
-    // Status filter
+    // Status filter (supports multiple statuses separated by comma)
     if (status) {
-      where.status = status as VKStatus
+      const statuses = status.split(',').filter(Boolean)
+      if (statuses.length === 1) {
+        where.status = statuses[0] as VKStatus
+      } else if (statuses.length > 1) {
+        where.status = { in: statuses as VKStatus[] }
+      }
+    }
+
+    // Date filter
+    if (dateFrom || dateTo) {
+      where.startDateTime = {}
+      if (dateFrom) {
+        where.startDateTime.gte = new Date(dateFrom)
+      }
+      if (dateTo) {
+        // Add 1 day to include the entire end date
+        const endDate = new Date(dateTo)
+        endDate.setDate(endDate.getDate() + 1)
+        where.startDateTime.lt = endDate
+      }
     }
 
     // Gestor filter
