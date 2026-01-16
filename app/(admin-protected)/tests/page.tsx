@@ -3,16 +3,14 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import Select from 'react-select'
-import { PlusIcon, MagnifyingGlassIcon, DocumentDuplicateIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { StyledSelect, SimpleSelect, type SelectOption } from '@/components/StyledSelect'
+import { PlusIcon, MagnifyingGlassIcon, DocumentDuplicateIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import { Pagination } from '@/components/Pagination'
 import { useTests, type Test } from '@/hooks/useTests'
 import { useTestTypes } from '@/hooks/useTestTypes'
 
-type TestTypeOption = {
-  value: string
-  label: string
-}
+// Reuse SelectOption from StyledSelect
+type TestTypeOption = SelectOption
 
 // Status badge podľa Figma dizajnu
 function getStatusBadge(approved: boolean | null, isPublished?: boolean) {
@@ -49,8 +47,26 @@ export default function TestsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<TestTypeOption | null>(null)
   const [approvedFilter, setApprovedFilter] = useState<'all' | boolean>('all')
+  const [sortOption, setSortOption] = useState('newest')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+
+  // Parse sort option into sortBy and sortOrder
+  const getSortParams = (option: string): { sortBy: string; sortOrder: 'asc' | 'desc' } => {
+    switch (option) {
+      case 'oldest':
+        return { sortBy: 'createdAt', sortOrder: 'asc' }
+      case 'name_asc':
+        return { sortBy: 'name', sortOrder: 'asc' }
+      case 'name_desc':
+        return { sortBy: 'name', sortOrder: 'desc' }
+      case 'newest':
+      default:
+        return { sortBy: 'createdAt', sortOrder: 'desc' }
+    }
+  }
+
+  const { sortBy, sortOrder } = getSortParams(sortOption)
 
   // Fetch test types for filter
   const { data: testTypesData } = useTestTypes({ limit: 100 })
@@ -65,25 +81,30 @@ export default function TestsPage() {
     return () => clearTimeout(timer)
   }, [search])
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or sorting change
   useEffect(() => {
     setPage(1)
-  }, [typeFilter, approvedFilter])
+  }, [typeFilter, approvedFilter, sortOption])
 
   // Use React Query hook
   const { data, isLoading } = useTests({
     search: debouncedSearch,
-    testTypeId: typeFilter?.value,
+    testTypeId: typeFilter?.value || undefined,
     approved: approvedFilter,
     page,
     limit: pageSize,
+    sortBy,
+    sortOrder,
   })
 
-  // Build test type options from fetched test types
-  const testTypeOptions = testTypesData?.testTypes.map(type => ({
-    value: type.id,
-    label: type.name
-  })) || []
+  // Build test type options from fetched test types (with "Všetky typy" as first option)
+  const testTypeOptions = [
+    { value: '', label: 'Všetky typy' },
+    ...(testTypesData?.testTypes.map(type => ({
+      value: type.id,
+      label: type.name
+    })) || [])
+  ]
 
   const tests = data?.tests ?? []
   const pagination = {
@@ -99,10 +120,11 @@ export default function TestsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <DocumentDuplicateIcon className="h-7 w-7 text-[#3F3840]" />
-          <h1 className="text-[28px] font-medium text-[#3F3840] font-heading">Testy</h1>
+          <h1 data-testid="page-title" className="text-[28px] font-medium text-[#3F3840] font-heading">Testy</h1>
         </div>
         <Link
           href="/tests/new"
+          data-testid="create-test-button"
           className="inline-flex items-center gap-2 px-4 py-2.5 border border-ds-purple-80 bg-ds-purple-10 text-[#302F85] rounded-[10px] text-sm font-medium hover:bg-ds-purple-80 hover:text-white transition-colors"
         >
           <PlusIcon className="h-5 w-5" aria-hidden="true" />
@@ -120,62 +142,62 @@ export default function TestsPage() {
             </div>
             <input
               type="text"
+              data-testid="search-input"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2.5 border border-[#EAE9EA] rounded-[10px] bg-white text-sm placeholder-[#6A646B] focus:outline-none focus:ring-1 focus:ring-ds-purple-80 focus:border-ds-purple-80"
+              className="block w-full pl-10 pr-10 py-2.5 border border-[#EAE9EA] rounded-[10px] bg-white text-sm placeholder-[#6A646B] focus:outline-none focus:ring-1 focus:ring-ds-purple-80 focus:border-ds-purple-80"
               placeholder="Vyhľadávať"
             />
+            {search && (
+              <button
+                type="button"
+                data-testid="clear-search-button"
+                onClick={() => setSearch('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#6A646B] hover:text-[#3F3840]"
+                aria-label="Vymazať vyhľadávanie"
+              >
+                <XMarkIcon className="h-5 w-5" aria-hidden="true" />
+              </button>
+            )}
           </div>
 
           {/* Type filter */}
-          <div className="w-48">
-            <Select
-              isClearable
-              placeholder="Všetky typy"
-              value={typeFilter}
-              onChange={(option) => setTypeFilter(option)}
-              options={testTypeOptions}
-              className="text-sm"
-              styles={{
-                control: (base) => ({
-                  ...base,
-                  borderColor: '#EAE9EA',
-                  borderRadius: '10px',
-                  minHeight: '42px',
-                  '&:hover': { borderColor: '#EAE9EA' },
-                }),
-              }}
-            />
-          </div>
+          <StyledSelect<TestTypeOption>
+            isSearchable
+            value={typeFilter || testTypeOptions[0]}
+            onChange={(option) => setTypeFilter(option)}
+            options={testTypeOptions}
+            className="w-48"
+            data-testid="type-filter"
+          />
 
           {/* Approved filter */}
-          <div>
-            <select
-              value={String(approvedFilter)}
-              onChange={(e) => {
-                const value = e.target.value
-                setApprovedFilter(value === 'all' ? 'all' : value === 'true')
-              }}
-              className="block w-full pl-3 pr-10 py-2.5 border border-[#EAE9EA] rounded-[10px] bg-white text-sm text-[#554E55] focus:outline-none focus:ring-1 focus:ring-ds-purple-80 focus:border-ds-purple-80"
-            >
-              <option value="all">Všetky stavy</option>
-              <option value="true">Schválené</option>
-              <option value="false">Neschválené</option>
-            </select>
-          </div>
+          <SimpleSelect
+            value={String(approvedFilter)}
+            onChange={(value) => setApprovedFilter(value === 'all' ? 'all' : value === 'true')}
+            options={[
+              { value: 'all', label: 'Všetky stavy' },
+              { value: 'true', label: 'Schválené' },
+              { value: 'false', label: 'Neschválené' },
+            ]}
+            className="w-44"
+            data-testid="status-filter"
+          />
         </div>
 
         {/* Sort dropdown */}
-        <div className="flex items-center gap-2">
-          <select
-            className="block pl-4 pr-10 py-2.5 border border-[#EAE9EA] rounded-[10px] bg-white text-sm text-[#554E55] focus:outline-none focus:ring-1 focus:ring-ds-purple-80 focus:border-ds-purple-80"
-          >
-            <option>Zoradiť od najnovších</option>
-            <option>Zoradiť od najstarších</option>
-            <option>Podľa názvu A-Z</option>
-            <option>Podľa názvu Z-A</option>
-          </select>
-        </div>
+        <SimpleSelect
+          value={sortOption}
+          onChange={(value) => setSortOption(value)}
+          options={[
+            { value: 'newest', label: 'Zoradiť od najnovších' },
+            { value: 'oldest', label: 'Zoradiť od najstarších' },
+            { value: 'name_asc', label: 'Podľa názvu A-Z' },
+            { value: 'name_desc', label: 'Podľa názvu Z-A' },
+          ]}
+          className="w-52"
+          data-testid="sort-dropdown"
+        />
       </div>
 
       {/* Divider */}
@@ -188,25 +210,38 @@ export default function TestsPage() {
             <div className="text-[#6A646B]">Načítavam...</div>
           </div>
         ) : tests.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-[15px] shadow-sm">
-            <h3 className="mt-2 text-sm font-medium text-[#3F3840]">Žiadne testy</h3>
-            <p className="mt-1 text-sm text-[#6A646B]">
-              Zatiaľ neboli vytvorené žiadne testy.
-            </p>
-            <div className="mt-6">
-              <Link
-                href="/tests/new"
-                className="inline-flex items-center gap-2 px-4 py-2.5 border border-ds-purple-80 bg-ds-purple-10 text-[#302F85] rounded-[10px] text-sm font-medium hover:bg-ds-purple-80 hover:text-white transition-colors"
-              >
-                <PlusIcon className="h-5 w-5" aria-hidden="true" />
-                Vytvoriť nový test
-              </Link>
-            </div>
+          <div data-testid="empty-state" className="text-center py-12 bg-white rounded-[15px] shadow-sm">
+            {/* Rozlíšenie: aktívne filtre vs. žiadne testy */}
+            {debouncedSearch || typeFilter || approvedFilter !== 'all' ? (
+              <>
+                <h3 data-testid="no-results-title" className="mt-2 text-sm font-medium text-[#3F3840]">Žiadne výsledky</h3>
+                <p data-testid="no-results-message" className="mt-1 text-sm text-[#6A646B]">
+                  Skúste zmeniť vyhľadávanie alebo filtre.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 data-testid="no-tests-title" className="mt-2 text-sm font-medium text-[#3F3840]">Žiadne testy</h3>
+                <p data-testid="no-tests-message" className="mt-1 text-sm text-[#6A646B]">
+                  Zatiaľ neboli vytvorené žiadne testy.
+                </p>
+                <div className="mt-6">
+                  <Link
+                    href="/tests/new"
+                    data-testid="create-test-empty-button"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 border border-ds-purple-80 bg-ds-purple-10 text-[#302F85] rounded-[10px] text-sm font-medium hover:bg-ds-purple-80 hover:text-white transition-colors"
+                  >
+                    <PlusIcon className="h-5 w-5" aria-hidden="true" />
+                    Vytvoriť nový test
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div data-testid="tests-list" className="space-y-2">
             {/* Header riadok */}
-            <div className="px-6 py-2 flex items-center text-sm text-[#6A646B]">
+            <div data-testid="tests-list-header" className="px-6 py-2 flex items-center text-sm text-[#6A646B]">
               <div className="flex-[2] min-w-0">Druh testu</div>
               <div className="flex-[1.5] min-w-0">Typ testu</div>
               <div className="flex-1 text-center">Počet otázok</div>
@@ -221,6 +256,7 @@ export default function TestsPage() {
             {tests.map((test) => (
               <div
                 key={test.id}
+                data-testid={`test-row-${test.id}`}
                 onClick={() => router.push(`/tests/${test.id}`)}
                 className="bg-white border border-[#EAE9EA] rounded-[10px] shadow-[0px_8px_25px_0px_rgba(42,34,43,0.07)] px-6 py-3 flex items-center cursor-pointer hover:border-ds-black-30 transition-colors"
               >

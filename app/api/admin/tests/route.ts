@@ -33,10 +33,10 @@ export async function GET(request: NextRequest) {
       where.authorId = session.user.id
     }
 
-    // Apply filters
+    // Apply filters - use name_search for diacritic-insensitive search
     if (search) {
-      where.name = {
-        contains: search,
+      where.name_search = {
+        contains: search.toLowerCase(),
         mode: 'insensitive'
       }
     }

@@ -1,11 +1,15 @@
 import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
-import { PrismaAdapter } from '@auth/prisma-adapter'
 import { UserRole } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
+import {
+  getAccountLockoutInfo,
+  recordFailedAttempt,
+  resetFailedAttempts
+} from '@/lib/auth/account-lockout'
 
 // Login schema validation
 const loginSchema = z.object({
@@ -43,8 +47,23 @@ export const authConfig: NextAuthConfig = {
               deleted: false,
               active: true,
             },
-            include: {
-              userRoles: true,
+            select: {
+              id: true,
+              email: true,
+              username: true,
+              name: true,
+              surname: true,
+              role: true,
+              password: true,
+              otpEnabled: true,
+              otpSecret: true,
+              twoFactorRequired: true,
+              mustChangePassword: true,
+              userRoles: {
+                select: {
+                  role: true,
+                },
+              },
             },
           })
 
@@ -52,11 +71,22 @@ export const authConfig: NextAuthConfig = {
             return null
           }
 
+          // Check if account is locked
+          const lockStatus = await getAccountLockoutInfo(user.id)
+          if (lockStatus.isLocked) {
+            throw new Error(`Account is locked: ${lockStatus.lockReason}`)
+          }
+
           // Verify password
           const isPasswordValid = await bcrypt.compare(password, user.password)
           if (!isPasswordValid) {
+            // Record failed login attempt
+            await recordFailedAttempt(user.id)
             return null
           }
+
+          // Reset failed attempts on successful login
+          await resetFailedAttempts(user.id)
 
           // Update last login
           await prisma.user.update({
@@ -64,7 +94,7 @@ export const authConfig: NextAuthConfig = {
             data: { lastLoginAt: new Date() },
           })
 
-          // Return user data for session
+          // Return user data for session with 2FA and password change flags
           return {
             id: user.id,
             email: user.email,
@@ -76,6 +106,10 @@ export const authConfig: NextAuthConfig = {
               role: ur.role,
             })),
             type: 'user',
+            // 2FA and security flags
+            twoFactorRequired: user.twoFactorRequired || false,
+            twoFactorEnabled: user.otpEnabled || false,
+            mustChangePassword: user.mustChangePassword || false,
           }
         } catch (error) {
           console.error('Authorization error:', error)
@@ -175,6 +209,10 @@ export const authConfig: NextAuthConfig = {
           token.type = 'user'
           token.name = user.name
           token.surname = user.surname
+          // 2FA and security flags
+          token.twoFactorRequired = user.twoFactorRequired
+          token.twoFactorEnabled = user.twoFactorEnabled
+          token.mustChangePassword = user.mustChangePassword
         }
       }
       return token
@@ -199,6 +237,10 @@ export const authConfig: NextAuthConfig = {
           session.user.type = 'user'
           session.user.name = token.name as string
           session.user.surname = token.surname as string
+          // 2FA and security flags
+          session.user.twoFactorRequired = token.twoFactorRequired as boolean
+          session.user.twoFactorEnabled = token.twoFactorEnabled as boolean
+          session.user.mustChangePassword = token.mustChangePassword as boolean
         }
 
         // Temporary role switching (for both types)

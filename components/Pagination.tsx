@@ -34,7 +34,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
   }
 
   return (
-    <div className="flex justify-center">
+    <div className="flex justify-center" data-testid="pagination">
       <div className="bg-white border border-[#EAE9EA] rounded-[10px] shadow-[0px_8px_25px_0px_rgba(42,34,43,0.07)] p-2 flex items-center gap-4">
         {/* Prev button */}
         <button
@@ -44,6 +44,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
             currentPage === 1 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-50'
           }`}
           aria-label="Predchádzajúca stránka"
+          data-testid="pagination-prev"
         >
           <ChevronLeftIcon className="h-5 w-5 text-[#2A222B]" />
         </button>
@@ -63,6 +64,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
             }`}
             aria-label={typeof pageNum === 'number' ? `Stránka ${pageNum}` : undefined}
             aria-current={pageNum === currentPage ? 'page' : undefined}
+            data-testid={typeof pageNum === 'number' ? `pagination-page-${pageNum}` : `pagination-ellipsis-${index}`}
           >
             {pageNum}
           </button>
@@ -76,6 +78,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
             currentPage === totalPages ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-50'
           }`}
           aria-label="Nasledujúca stránka"
+          data-testid="pagination-next"
         >
           <ChevronRightIcon className="h-5 w-5 text-[#2A222B]" />
         </button>

@@ -77,3 +77,5 @@ Ako bude vyzerat upload?
 Viac suborov naraz, alebo po jednom subore?
 Ak viac suborov, tak ako nastavim typ suboru?
 Klonovanie suborov do ineho VK, ak bude rovnaky uzivatel?
+
+Ak pouzivam paginaciu, posielat do URL na ktorej strane chcem. To iste plati aj pre filtre. Je to kvoli tomu, ze ak refresnem stranku, tak sa filtre znova aplikuju.

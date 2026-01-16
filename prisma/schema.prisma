@@ -55,6 +55,22 @@ model User {
   passwordSetToken       String?   @unique
   passwordSetTokenExpiry DateTime?
 
+  // 2FA Management
+  twoFactorRequired      Boolean   @default(false)
+  twoFactorBackupCodes   String[]  @default([])
+  twoFactorLastUsedAt    DateTime?
+
+  // Password Management
+  mustChangePassword     Boolean   @default(false)
+  passwordChangedAt      DateTime?
+  passwordResetToken     String?   @unique
+  passwordResetExpiry    DateTime?
+
+  // Account Security
+  failedLoginAttempts    Int       @default(0)
+  lockedUntil            DateTime?
+  lockReason             String?
+
   deleted       Boolean  @default(false)
   deletedAt     DateTime?
   deletedEmail  String?
@@ -77,6 +93,10 @@ model User {
   securitySettingsUpdates SecuritySettings[] @relation("SecuritySettingsUpdatedBy")
   assignedTests TestAssignment[] @relation("AssignedTests")
   createdAssignments TestAssignment[] @relation("CreatedAssignments")
+  sessions      UserSession[]
+  breakGlassRequests BreakGlassAccess[] @relation("BreakGlassRequested")
+  breakGlassApprovals1 BreakGlassAccess[] @relation("BreakGlassApprover1")
+  breakGlassApprovals2 BreakGlassAccess[] @relation("BreakGlassApprover2")
 
   @@map("users")
 }
@@ -155,6 +175,9 @@ model Test {
 
   categoryId           String?
   category             TestCategory? @relation(fields: [categoryId], references: [id])
+
+  // Generated search column for diacritic-insensitive search
+  name_search          String?  @map("name_search")
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -674,4 +697,62 @@ model TestAssignment {
   approvedById        String?
 
   @@map("test_assignments")
+}
+
+// ==================== USER SESSIONS ====================
+
+model UserSession {
+  id            String   @id @default(cuid())
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  sessionToken  String   @unique
+  ipAddress     String?
+  userAgent     String?
+  deviceInfo    String?
+  
+  createdAt     DateTime @default(now())
+  lastAccessedAt DateTime @default(now())
+  expiresAt     DateTime
+  
+  active        Boolean  @default(true)
+  
+  @@index([userId, active])
+  @@index([sessionToken])
+  @@map("user_sessions")
+}
+
+// ==================== BREAK-GLASS ACCESS ====================
+
+model BreakGlassAccess {
+  id                String   @id @default(cuid())
+  
+  requestedById     String
+  requestedBy       User     @relation("BreakGlassRequested", fields: [requestedById], references: [id])
+  
+  approvedById1     String?
+  approvedBy1       User?    @relation("BreakGlassApprover1", fields: [approvedById1], references: [id])
+  
+  approvedById2     String?
+  approvedBy2       User?    @relation("BreakGlassApprover2", fields: [approvedById2], references: [id])
+  
+  reason            String
+  status            BreakGlassStatus @default(PENDING)
+  
+  accessGrantedAt   DateTime?
+  accessRevokedAt   DateTime?
+  expiresAt         DateTime
+  
+  createdAt         DateTime @default(now())
+  
+  @@map("break_glass_access")
+}
+
+enum BreakGlassStatus {
+  PENDING
+  APPROVED
+  DENIED
+  EXPIRED
+  REVOKED
 }
