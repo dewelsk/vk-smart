@@ -46,48 +46,20 @@ export default function TestSessionPage() {
   const timerInterval = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
-    // Load session from API (supports both regular login and admin switch)
+    // Load test session using JWT cookie authentication
     const loadSession = async () => {
       try {
-        const response = await fetch('/api/applicant/session')
-
-        let candidateIdToUse = ''
-
-        if (response.ok) {
-          // Use session from API (admin switch or regular login)
-          const sessionData = await response.json()
-          candidateIdToUse = sessionData.candidateId
-        } else {
-          // Fallback to sessionStorage (for regular applicant login)
-          const sessionData = sessionStorage.getItem('applicant-session')
-          if (!sessionData) {
-            router.push('/applicant/login')
-            return
-          }
-          const session = JSON.parse(sessionData)
-          candidateIdToUse = session.candidateId
-        }
-
-        setCandidateId(candidateIdToUse)
-
         // Load view mode preference
         const savedViewMode = sessionStorage.getItem('test-view-mode')
         if (savedViewMode === 'all') {
           setViewMode('all')
         }
 
-        loadTestSession(candidateIdToUse)
+        // Load test session - uses JWT cookie for auth
+        await loadTestSession()
       } catch (error) {
         console.error('Session load error:', error)
-        // Fallback to sessionStorage
-        const sessionData = sessionStorage.getItem('applicant-session')
-        if (!sessionData) {
-          router.push('/applicant/login')
-          return
-        }
-        const session = JSON.parse(sessionData)
-        setCandidateId(session.candidateId)
-        loadTestSession(session.candidateId)
+        router.push('/applicant/login')
       }
     }
 
@@ -107,9 +79,9 @@ export default function TestSessionPage() {
     }
   }, [sessionId, router])
 
-  // Setup auto-save when candidateId is available
+  // Setup auto-save when test is loaded
   useEffect(() => {
-    if (!candidateId) return
+    if (!test) return
 
     // Setup auto-save every 1 second
     autoSaveInterval.current = setInterval(() => {
@@ -119,7 +91,7 @@ export default function TestSessionPage() {
     return () => {
       if (autoSaveInterval.current) clearInterval(autoSaveInterval.current)
     }
-  }, [candidateId])
+  }, [test])
 
   useEffect(() => {
     if (session && session.serverStartTime && session.durationSeconds) {
@@ -147,18 +119,17 @@ export default function TestSessionPage() {
     }
   }, [session])
 
-  const loadTestSession = async (candidateId: string) => {
+  const loadTestSession = async () => {
     try {
-      const response = await fetch(`/api/applicant/test/${sessionId}`, {
-        headers: {
-          'x-candidate-id': candidateId
-        }
-      })
+      // Uses JWT cookie for authentication
+      const response = await fetch(`/api/applicant/test/${sessionId}`)
 
       if (!response.ok) {
         const data = await response.json()
         if (data.redirectUrl) {
           router.push(data.redirectUrl)
+        } else if (response.status === 401) {
+          router.push('/applicant/login')
         } else {
           toast.error(data.error || 'Chyba pri načítaní testu')
         }
@@ -179,16 +150,16 @@ export default function TestSessionPage() {
   }
 
   const saveAnswers = async () => {
-    if (!candidateId || saving) return
+    if (!test || saving) return
 
     setSaving(true)
 
     try {
+      // Uses JWT cookie for authentication
       const response = await fetch(`/api/applicant/test/${sessionId}/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-candidate-id': candidateId
         },
         body: JSON.stringify({ answers })
       })
@@ -222,7 +193,7 @@ export default function TestSessionPage() {
 
   const confirmSaveAndLeave = async () => {
     await saveAnswers()
-    router.push('/my-tests')
+    router.push('/applicant/my-tests')
   }
 
   const handleSubmitClick = () => {
@@ -234,11 +205,9 @@ export default function TestSessionPage() {
     try {
       toast.loading('Odosielam test...')
 
+      // Uses JWT cookie for authentication
       const response = await fetch(`/api/applicant/test/${sessionId}/submit`, {
         method: 'POST',
-        headers: {
-          'x-candidate-id': candidateId
-        }
       })
 
       const data = await response.json()

@@ -4,6 +4,7 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { CandidateAttachmentType } from '@prisma/client'
+import { getAuthenticatedCandidate } from '@/lib/applicant-auth'
 
 const STORAGE_ROOT = path.join(process.cwd(), 'storage', 'applicants')
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25 MB
@@ -36,41 +37,6 @@ const sanitizeFileName = (fileName: string) => {
 
 const resolveDir = (candidateId: string, vkId: string) => path.join(STORAGE_ROOT, candidateId, vkId)
 
-const getCandidateId = (request: NextRequest) => {
-  const candidateId = request.headers.get('x-candidate-id') || request.nextUrl.searchParams.get('candidateId')
-
-  if (!candidateId) {
-    throw new Error('Chýba identifikátor uchádzača')
-  }
-
-  return candidateId
-}
-
-const getVkId = (request: NextRequest) => {
-  const vkId = request.headers.get('x-vk-id') || request.nextUrl.searchParams.get('vkId')
-
-  if (!vkId) {
-    throw new Error('Chýba identifikátor výberového konania')
-  }
-
-  return vkId
-}
-
-const ensureCandidateContext = async (candidateId: string, vkId: string) => {
-  const candidate = await prisma.candidate.findFirst({
-    where: {
-      id: candidateId,
-      vkId,
-      deleted: false,
-    },
-    select: { id: true },
-  })
-
-  if (!candidate) {
-    throw new Error('Neplatná kombinácia uchádzača a výberového konania')
-  }
-}
-
 const listAttachments = async (candidateId: string, vkId: string) => {
   const attachments = await prisma.candidateAttachment.findMany({
     where: {
@@ -91,28 +57,42 @@ const listAttachments = async (candidateId: string, vkId: string) => {
 
 export async function GET(request: NextRequest) {
   try {
-    const candidateId = getCandidateId(request)
-    const vkId = getVkId(request)
+    // SECURITY: Only accept JWT-based authentication
+    const candidate = await getAuthenticatedCandidate(request)
 
-    await ensureCandidateContext(candidateId, vkId)
+    if (!candidate) {
+      return NextResponse.json(
+        { error: 'Neautorizovaný prístup' },
+        { status: 401 }
+      )
+    }
 
-    const files = await listAttachments(candidateId, vkId)
+    const files = await listAttachments(candidate.id, candidate.vkId)
 
     return NextResponse.json({ files })
   } catch (error) {
     console.error('Attachments GET error:', error)
-    const status = error instanceof Error && error.message.includes('identifikátor') ? 400 : 500
-    const message = error instanceof Error ? error.message : 'Chyba pri načítavaní príloh'
-    return NextResponse.json({ error: message }, { status })
+    return NextResponse.json(
+      { error: 'Chyba pri načítavaní príloh' },
+      { status: 500 }
+    )
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const candidateId = getCandidateId(request)
-    const vkId = getVkId(request)
+    // SECURITY: Only accept JWT-based authentication
+    const candidate = await getAuthenticatedCandidate(request)
 
-    await ensureCandidateContext(candidateId, vkId)
+    if (!candidate) {
+      return NextResponse.json(
+        { error: 'Neautorizovaný prístup' },
+        { status: 401 }
+      )
+    }
+
+    const candidateId = candidate.id
+    const vkId = candidate.vkId
 
     const formData = await request.formData()
 
@@ -198,8 +178,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, files }, { status: 201 })
   } catch (error) {
     console.error('Attachments POST error:', error)
-    const status = error instanceof Error && error.message.includes('identifikátor') ? 400 : 500
-    const message = error instanceof Error ? error.message : 'Chyba pri nahrávaní príloh'
-    return NextResponse.json({ error: message }, { status })
+    return NextResponse.json(
+      { error: 'Chyba pri nahrávaní príloh' },
+      { status: 500 }
+    )
   }
 }

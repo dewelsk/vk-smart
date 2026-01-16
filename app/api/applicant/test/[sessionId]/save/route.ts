@@ -1,28 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getToken } from 'next-auth/jwt'
-
-async function getCandidateFromRequest(request: NextRequest) {
-  // Try JWT token first (for admin switch)
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-  })
-
-  if (token?.candidateId) {
-    return await prisma.candidate.findUnique({
-      where: { id: token.candidateId as string }
-    })
-  }
-
-  // Fallback to header (for regular applicant login)
-  const candidateId = request.headers.get('x-candidate-id')
-  if (!candidateId) return null
-
-  return await prisma.candidate.findUnique({
-    where: { id: candidateId }
-  })
-}
+import { getAuthenticatedCandidate } from '@/lib/applicant-auth'
 
 // Helper function to calculate real-time stats (for admin monitoring)
 function calculateRealTimeStats(answers: Record<string, any>, questions: any[]) {
@@ -76,7 +54,8 @@ export async function POST(
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const candidate = await getCandidateFromRequest(request)
+    // SECURITY: Only accept JWT-based authentication
+    const candidate = await getAuthenticatedCandidate(request)
 
     if (!candidate) {
       return NextResponse.json(
@@ -111,10 +90,7 @@ export async function POST(
       )
     }
 
-    // MVP: Disabled security checks
-    // TODO: Re-enable in production
-    /*
-    // Check ownership
+    // SECURITY: Check ownership
     if (session.candidateId !== candidate.id) {
       return NextResponse.json(
         { error: 'Tento test nepatrí k vášmu účtu' },
@@ -122,14 +98,13 @@ export async function POST(
       )
     }
 
-    // Check if session is still in progress
+    // SECURITY: Check if session is still in progress
     if (session.status !== 'IN_PROGRESS') {
       return NextResponse.json(
         { error: 'Test nie je aktívny' },
         { status: 400 }
       )
     }
-    */
 
     // Check if time expired
     if (session.serverStartTime && session.durationSeconds) {

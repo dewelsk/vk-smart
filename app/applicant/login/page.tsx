@@ -80,15 +80,18 @@ export default function ApplicantLoginPage() {
         return
       }
 
-      // Store session data (in production, use secure httpOnly cookies)
-      sessionStorage.setItem('applicant-session', JSON.stringify(data.session))
+      // Session is now stored in secure httpOnly cookie by the server
+      // Store only display data in sessionStorage for UI purposes
       sessionStorage.setItem('applicant-user', JSON.stringify(data.user))
       sessionStorage.setItem('applicant-vk', JSON.stringify(data.vk))
+      if (data.candidate) {
+        sessionStorage.setItem('applicant-candidate', JSON.stringify(data.candidate))
+      }
 
       toast.success('Úspešne prihlásený')
 
-      // Redirect to my tests
-      router.push('/my-tests')
+      // Redirect to dashboard
+      router.push('/applicant/dashboard')
     } catch (error) {
       toast.dismiss()
       toast.error('Chyba pri prihlásení')

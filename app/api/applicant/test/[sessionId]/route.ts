@@ -1,35 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getToken } from 'next-auth/jwt'
-
-async function getCandidateFromRequest(request: NextRequest) {
-  // Try JWT token first (for admin switch)
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-  })
-
-  if (token?.candidateId) {
-    return await prisma.candidate.findUnique({
-      where: { id: token.candidateId as string }
-    })
-  }
-
-  // Fallback to header (for regular applicant login)
-  const candidateId = request.headers.get('x-candidate-id')
-  if (!candidateId) return null
-
-  return await prisma.candidate.findUnique({
-    where: { id: candidateId }
-  })
-}
+import { getAuthenticatedCandidate } from '@/lib/applicant-auth'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { sessionId: string } }
 ) {
   try {
-    const candidate = await getCandidateFromRequest(request)
+    // SECURITY: Only accept JWT-based authentication
+    const candidate = await getAuthenticatedCandidate(request)
 
     if (!candidate) {
       return NextResponse.json(
@@ -78,10 +57,7 @@ export async function GET(
       )
     }
 
-    // MVP: Disabled security checks - allow any candidate to view any test
-    // TODO: Re-enable in production
-    /*
-    // Check if session belongs to this candidate
+    // SECURITY: Check if session belongs to this candidate
     if (session.candidateId !== candidate.id) {
       return NextResponse.json(
         { error: 'Tento test nepatrí k vášmu účtu' },
@@ -89,7 +65,7 @@ export async function GET(
       )
     }
 
-    // Check if session is already completed
+    // SECURITY: Check if session is already completed
     if (session.status === 'COMPLETED') {
       return NextResponse.json(
         {
@@ -99,7 +75,6 @@ export async function GET(
         { status: 400 }
       )
     }
-    */
 
     // Update lastAccessedAt
     await prisma.testSession.update({
@@ -122,10 +97,6 @@ export async function GET(
             : []
         }))
       : []
-
-    console.log('[TEST SESSION] Questions:', questions.length)
-    console.log('[TEST SESSION] First question:', questions[0])
-    console.log('[TEST SESSION] Session answers:', session.answers)
 
     // Return session data
     return NextResponse.json({

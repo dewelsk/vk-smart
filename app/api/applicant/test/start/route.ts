@@ -1,32 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getToken } from 'next-auth/jwt'
-
-async function getCandidateFromRequest(request: NextRequest) {
-  // Try JWT token first (for admin switch)
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
-  })
-
-  if (token?.candidateId) {
-    return await prisma.candidate.findUnique({
-      where: { id: token.candidateId as string }
-    })
-  }
-
-  // Fallback to header (for regular applicant login)
-  const candidateId = request.headers.get('x-candidate-id')
-  if (!candidateId) return null
-
-  return await prisma.candidate.findUnique({
-    where: { id: candidateId }
-  })
-}
+import { getAuthenticatedCandidate } from '@/lib/applicant-auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const candidate = await getCandidateFromRequest(request)
+    // SECURITY: Only accept JWT-based authentication
+    const candidate = await getAuthenticatedCandidate(request)
 
     if (!candidate) {
       return NextResponse.json(
@@ -61,10 +40,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // MVP: Security checks disabled - allow access to any test
-    // TODO: Re-enable in production
-    /*
-    // Check if candidate belongs to this VK
+    // SECURITY: Check if candidate belongs to this VK
     if (vkTest.vkId !== candidate.vkId) {
       return NextResponse.json(
         { error: 'Tento test nie je priradený k vášmu VK' },
@@ -72,7 +48,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if VK is in TESTOVANIE status
+    // SECURITY: Check if VK is in TESTOVANIE status
     if (vkTest.vk.status !== 'TESTOVANIE') {
       return NextResponse.json(
         { error: 'Testy ešte nie sú spustené alebo VK už bolo ukončené' },
@@ -80,7 +56,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if previous level was passed (if this is not level 1)
+    // SECURITY: Check if previous level was passed (if this is not level 1)
     if (vkTest.level > 1) {
       const previousVkTest = await prisma.vKTest.findFirst({
         where: {
@@ -107,7 +83,6 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    */
 
     // Check if session already exists
     let session = await prisma.testSession.findUnique({
@@ -119,17 +94,13 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // MVP: Allow retaking completed tests
-    // TODO: Re-enable in production
-    /*
-    // If session exists and is completed, return error
+    // SECURITY: If session exists and is completed, return error
     if (session && session.status === 'COMPLETED') {
       return NextResponse.json(
         { error: 'Tento test už bol dokončený' },
         { status: 400 }
       )
     }
-    */
 
     // If session doesn't exist or is NOT_STARTED, create/update it
     const now = new Date()
