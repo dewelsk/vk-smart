@@ -257,7 +257,7 @@ export default function AdminLoginPage() {
                 </button>
 
                 <a
-                  href="#"
+                  href="/auth/password-reset"
                   className="text-sm font-medium text-ds-purple-80 border-b border-ds-purple-80/30 pb-0.5 hover:border-ds-purple-80 transition-all"
                 >
                   Zabudli ste heslo?

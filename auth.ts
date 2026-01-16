@@ -189,7 +189,7 @@ export const authConfig: NextAuthConfig = {
     error: '/admin/login',
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       // Initial sign in
       if (user) {
         if (user.type === 'candidate') {
@@ -213,8 +213,15 @@ export const authConfig: NextAuthConfig = {
           token.twoFactorRequired = user.twoFactorRequired
           token.twoFactorEnabled = user.twoFactorEnabled
           token.mustChangePassword = user.mustChangePassword
+          token.twoFactorVerified = false // Initially false
         }
       }
+
+      // Handle session updates (e.g. after 2FA verification)
+      if (trigger === 'update' && session?.twoFactorVerified !== undefined) {
+        token.twoFactorVerified = session.twoFactorVerified
+      }
+
       return token
     },
     async session({ session, token }) {
@@ -241,6 +248,7 @@ export const authConfig: NextAuthConfig = {
           session.user.twoFactorRequired = token.twoFactorRequired as boolean
           session.user.twoFactorEnabled = token.twoFactorEnabled as boolean
           session.user.mustChangePassword = token.mustChangePassword as boolean
+          session.user.twoFactorVerified = token.twoFactorVerified as boolean
         }
 
         // Temporary role switching (for both types)

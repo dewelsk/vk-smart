@@ -36,7 +36,11 @@ export default function Verify2FAPage() {
 
             const data = await response.json()
 
-            // Show warning if backup code was used
+            // 1. Update session to mark 2FA as verified
+            const { update } = await import('next-auth/react')
+            await update({ twoFactorVerified: true })
+
+            // 2. Show warning if backup code was used
             if (data.usedBackupCode) {
                 toast.success(`Prihlásenie úspešné. Zostáva ${data.remainingBackupCodes} záložných kódov.`, {
                     duration: 5000,
@@ -45,7 +49,7 @@ export default function Verify2FAPage() {
                 toast.success('Prihlásenie úspešné!')
             }
 
-            // Redirect to callback URL
+            // 3. Redirect to callback URL
             router.push(callbackUrl)
             router.refresh()
         } catch (error: any) {
