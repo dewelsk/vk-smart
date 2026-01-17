@@ -35,6 +35,8 @@ type UseVKsParams = {
   limit?: number
   dateFrom?: string
   dateTo?: string
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
 }
 
 export function useVKs(params: UseVKsParams = {}) {
@@ -48,6 +50,8 @@ export function useVKs(params: UseVKsParams = {}) {
       if (params.limit) searchParams.set('limit', params.limit.toString())
       if (params.dateFrom) searchParams.set('dateFrom', params.dateFrom)
       if (params.dateTo) searchParams.set('dateTo', params.dateTo)
+      if (params.sortBy) searchParams.set('sortBy', params.sortBy)
+      if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder)
 
       const res = await fetch(`/api/admin/vk?${searchParams}`)
       if (!res.ok) throw new Error('Failed to fetch VKs')
