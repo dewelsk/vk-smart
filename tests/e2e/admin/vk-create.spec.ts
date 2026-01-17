@@ -7,32 +7,65 @@ test.describe('VK Create @admin @vk @critical', () => {
     await page.goto('/vk/new')
   })
 
-  test('should display create VK form', async ({ page }) => {
-    await expect(page.locator('h1')).toContainText('Vytvorenie nového výberového konania')
+  test('should display create VK wizard page', async ({ page }) => {
+    // Check page loaded
+    await expect(page.getByTestId('vk-new-page')).toBeVisible()
+    await expect(page.getByTestId('page-title')).toBeVisible()
+
+    // Check process sidebar with steps
+    await expect(page.getByTestId('process-sidebar')).toBeVisible()
+    await expect(page.getByTestId('step-hlavicka')).toBeVisible()
+    await expect(page.getByTestId('step-nastavenie')).toBeVisible()
+    await expect(page.getByTestId('step-komisia')).toBeVisible()
+    await expect(page.getByTestId('step-testy')).toBeVisible()
+    await expect(page.getByTestId('step-ustna')).toBeVisible()
+    await expect(page.getByTestId('step-uchadzaci')).toBeVisible()
+
+    // Check PDF upload zone
+    await expect(page.getByTestId('pdf-upload-zone')).toBeVisible()
 
     // Check form fields
-    await expect(page.locator('label:has-text("Identifikátor")')).toBeVisible()
-    await expect(page.locator('label:has-text("Rezort")')).toBeVisible()
-    await expect(page.locator('label:has-text("Druh výberového konania")')).toBeVisible()
-    await expect(page.locator('label:has-text("Organizačná jednotka")')).toBeVisible()
-    await expect(page.locator('label:has-text("Služobná oblasť")')).toBeVisible()
-    await expect(page.locator('label:has-text("Označenie pracovného miesta")')).toBeVisible()
-    await expect(page.locator('label:has-text("Druh štátnej služby")')).toBeVisible()
-    await expect(page.locator('label:has-text("Dátum vyhlásenia")')).toBeVisible()
+    await expect(page.getByTestId('identifier-input')).toBeVisible()
+    await expect(page.getByTestId('selection-type-input')).toBeVisible()
+    await expect(page.getByTestId('organizational-unit-input')).toBeVisible()
+    await expect(page.getByTestId('service-field-input')).toBeVisible()
+    await expect(page.getByTestId('position-input')).toBeVisible()
+    await expect(page.getByTestId('number-of-positions-input')).toBeVisible()
 
     // Check buttons
-    await expect(page.locator('button:has-text("Vytvoriť VK")')).toBeVisible()
-    await expect(page.locator('a:has-text("Zrušiť")')).toBeVisible()
+    await expect(page.getByTestId('continue-button')).toBeVisible()
+    await expect(page.getByTestId('save-draft-button')).toBeVisible()
+    await expect(page.getByTestId('back-button')).toBeVisible()
   })
 
   test('should show validation errors for empty form', async ({ page }) => {
-    await page.click('button:has-text("Vytvoriť VK")')
+    await page.getByTestId('continue-button').click()
 
-    // Should show validation errors
-    await expect(page.locator('text=Identifikátor je povinný')).toBeVisible()
-    await expect(page.locator('text=Rezort je povinný')).toBeVisible()
-    await expect(page.locator('text=Druh výberového konania je povinný')).toBeVisible()
-    await expect(page.locator('text=Organizačná jednotka je povinná')).toBeVisible()
+    // Should show validation errors under inputs
+    await expect(page.getByTestId('identifier-error')).toBeVisible()
+    await expect(page.getByTestId('selection-type-error')).toBeVisible()
+    await expect(page.getByTestId('organizational-unit-error')).toBeVisible()
+    await expect(page.getByTestId('service-field-error')).toBeVisible()
+    await expect(page.getByTestId('position-error')).toBeVisible()
+  })
+
+  test('should show errors in sidebar navigation', async ({ page }) => {
+    await page.getByTestId('continue-button').click()
+
+    // Should show errors under the step in sidebar
+    await expect(page.getByTestId('step-error-hlavicka-0')).toBeVisible()
+  })
+
+  test('should clear error when input is filled', async ({ page }) => {
+    // Submit empty form to trigger errors
+    await page.getByTestId('continue-button').click()
+    await expect(page.getByTestId('identifier-error')).toBeVisible()
+
+    // Fill the field
+    await page.getByTestId('identifier-input').fill('VK-TEST-123')
+
+    // Error should be cleared
+    await expect(page.getByTestId('identifier-error')).not.toBeVisible()
   })
 
   test('should create new VK successfully', async ({ page }) => {
@@ -40,85 +73,68 @@ test.describe('VK Create @admin @vk @critical', () => {
 
     // Fill form using data-testid
     await page.getByTestId('identifier-input').fill(`VK-TEST-${timestamp}`)
-
-    // Select institution (rezort) - using inputId
-    await page.locator('#institution-select').click()
-    await page.keyboard.press('ArrowDown')
-    await page.keyboard.press('Enter')
-    await page.keyboard.press('Escape')
-
-    await page.getByTestId('selection-type-input').fill('Výberové konanie')
+    await page.getByTestId('selection-type-input').fill('Vonkajšie výberové konanie')
     await page.getByTestId('organizational-unit-input').fill('Test Unit')
-    await page.getByTestId('service-field-input').fill('Test Field')
-    await page.getByTestId('position-input').fill('Test Position')
-    await page.getByTestId('service-type-input').fill('Test Type')
-    await page.getByTestId('date-input').fill('2025-12-31')
+    await page.getByTestId('service-field-input').fill('IT špecialista')
+    await page.getByTestId('position-input').fill('1.03 - Medzinárodná spolupráca')
+    await page.getByTestId('number-of-positions-input').clear()
+    await page.getByTestId('number-of-positions-input').fill('2')
 
     // Submit form
-    await page.getByTestId('submit-button').click()
+    await page.getByTestId('continue-button').click()
 
     // Should redirect to VK detail
     await page.waitForURL(/\/vk\/[a-z0-9]+$/, { timeout: 10000 })
 
     // Verify we're on VK detail page
     await page.waitForLoadState('networkidle')
-    const pageText = await page.textContent('body')
-    expect(pageText).toContain('VK')
   })
 
-  test('should cancel VK creation', async ({ page }) => {
-    await page.click('a:has-text("Zrušiť")')
+  test('should navigate back to VK list', async ({ page }) => {
+    await page.getByTestId('back-button').click()
     await page.waitForURL('/vk')
-    await expect(page.locator('h1')).toContainText('Výberové konania')
+    await expect(page.getByTestId('vk-page')).toBeVisible()
+  })
+
+  test('should save draft with minimal data', async ({ page }) => {
+    await page.getByTestId('save-draft-button').click()
+
+    // Should redirect to VK detail (draft is saved with default values)
+    await page.waitForURL(/\/vk\/[a-z0-9]+$/, { timeout: 10000 })
   })
 
   test('should set default numberOfPositions to 1', async ({ page }) => {
-    const numberOfPositionsInput = page.locator('input[name="numberOfPositions"]')
+    const numberOfPositionsInput = page.getByTestId('number-of-positions-input')
     await expect(numberOfPositionsInput).toHaveValue('1')
   })
 
   test('should change numberOfPositions', async ({ page }) => {
-    const numberOfPositionsInput = page.locator('input[name="numberOfPositions"]')
+    const numberOfPositionsInput = page.getByTestId('number-of-positions-input')
     await numberOfPositionsInput.clear()
     await numberOfPositionsInput.fill('5')
     await expect(numberOfPositionsInput).toHaveValue('5')
   })
 
-  test('should create VK with gestor', async ({ page }) => {
-    const timestamp = Date.now()
+  test('should switch between wizard steps', async ({ page }) => {
+    // Click on step 2
+    await page.getByTestId('step-nastavenie').click()
 
-    await page.fill('input[name="identifier"]', `VK-GESTOR-${timestamp}`)
+    // Should show step 2 form fields
+    await expect(page.getByTestId('event-date-input')).toBeVisible()
+    await expect(page.getByTestId('event-time-input')).toBeVisible()
+    await expect(page.getByTestId('room-input')).toBeVisible()
 
-    // Select institution
-    await page.click('text=Vyber rezort...')
-    await page.keyboard.press('ArrowDown')
-    await page.keyboard.press('Enter')
-    await page.keyboard.press('Escape')
+    // Click back to step 1
+    await page.getByTestId('step-hlavicka').click()
 
-    await page.fill('input[name="selectionType"]', 'Výberové konanie')
-    await page.fill('input[name="organizationalUnit"]', 'Test Unit')
-    await page.fill('input[name="serviceField"]', 'Test Field')
-    await page.fill('input[name="position"]', 'Test Position')
-    await page.fill('input[name="serviceType"]', 'Test Type')
-    await page.fill('input[name="date"]', '2025-12-31')
-
-    // Select gestor
-    const gestorSelect = page.locator('text=Vyber gestora...').first()
-    await gestorSelect.click()
-    await page.keyboard.press('ArrowDown')
-    await page.keyboard.press('Enter')
-    await page.keyboard.press('Escape')
-
-    // Submit
-    await page.click('button:has-text("Vytvoriť VK")')
-    await page.waitForURL(/\/vk/, { timeout: 10000 })
+    // Should show form fields again
+    await expect(page.getByTestId('identifier-input')).toBeVisible()
   })
 
-  test('should validate date field', async ({ page }) => {
-    const dateInput = page.locator('input[name="date"]')
-    await dateInput.fill('invalid-date')
-
-    // Browser should handle date validation
-    await expect(dateInput).toBeFocused()
+  test('should display PDF upload zone with correct text', async ({ page }) => {
+    const uploadZone = page.getByTestId('pdf-upload-zone')
+    await expect(uploadZone).toBeVisible()
+    await expect(uploadZone).toContainText('Vložte PDF súbor s údajmi o výberovom konaní')
+    await expect(uploadZone).toContainText('Max. veľkosť: 50MB')
   })
 })
