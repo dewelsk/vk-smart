@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
@@ -11,12 +11,20 @@ import {
   UsersIcon,
   AcademicCapIcon,
   DocumentTextIcon,
-  ArchiveBoxIcon,
   Cog6ToothIcon,
   Bars3Icon,
   XMarkIcon,
   ArrowRightOnRectangleIcon,
   ExclamationTriangleIcon,
+  ChevronDownIcon,
+  PlusIcon,
+  ListBulletIcon,
+  ArchiveBoxIcon,
+  BeakerIcon,
+  QuestionMarkCircleIcon,
+  PlayIcon,
+  TagIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
 import type { Session } from 'next-auth'
 import { toast } from 'react-hot-toast'
@@ -25,11 +33,19 @@ interface TopNavigationProps {
   session: Session
 }
 
-type NavItem = {
+type NavChild = {
   name: string
   href: string
+  icon?: React.ComponentType<{ className?: string }>
+  badge?: string | number
+}
+
+type NavItem = {
+  name: string
+  href?: string
   icon: React.ComponentType<{ className?: string }>
   roles: string[]
+  children?: NavChild[]
 }
 
 export default function TopNavigation({ session }: TopNavigationProps) {
@@ -37,15 +53,48 @@ export default function TopNavigation({ session }: TopNavigationProps) {
   const router = useRouter()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isSwitchingBack, setIsSwitchingBack] = useState(false)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Main navigation items (flat, no dropdowns)
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Main navigation items with two-level structure
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: ChartBarIcon, roles: ['SUPERADMIN', 'ADMIN'] },
-    { name: 'Výberové konania', href: '/vk', icon: ClipboardDocumentListIcon, roles: ['SUPERADMIN', 'ADMIN'] },
+    {
+      name: 'Výberové konania',
+      icon: ClipboardDocumentListIcon,
+      roles: ['SUPERADMIN', 'ADMIN'],
+      children: [
+        { name: 'Aktívne VK', href: '/vk', icon: PlayIcon },
+        { name: 'Zoznam VK', href: '/vk/all', icon: ListBulletIcon },
+        { name: 'Archív', href: '/archive/vk', icon: ArchiveBoxIcon },
+      ],
+    },
     { name: 'Používatelia', href: '/users', icon: UsersIcon, roles: ['SUPERADMIN', 'ADMIN'] },
     { name: 'Uchádzači', href: '/applicants', icon: AcademicCapIcon, roles: ['SUPERADMIN', 'ADMIN'] },
-    { name: 'Testy', href: '/tests', icon: DocumentTextIcon, roles: ['SUPERADMIN', 'ADMIN', 'GESTOR'] },
-    { name: 'Archív', href: '/archive/vk', icon: ArchiveBoxIcon, roles: ['SUPERADMIN', 'ADMIN'] },
+    {
+      name: 'Testy',
+      icon: DocumentTextIcon,
+      roles: ['SUPERADMIN', 'ADMIN'],
+      children: [
+        { name: 'Pridelenie testov', href: '/tests/assign', icon: ClipboardDocumentListIcon },
+        { name: 'Zoznam testov', href: '/tests', icon: ListBulletIcon },
+        { name: 'Batéria otázok', href: '/questions/battery', icon: QuestionMarkCircleIcon },
+        { name: 'Precvičovanie', href: '/tests/practice', icon: BeakerIcon },
+        { name: 'Typy testov', href: '/tests/types', icon: TagIcon },
+        { name: 'Import testov', href: '/tests/import', icon: ArrowDownTrayIcon },
+      ],
+    },
     { name: 'Nastavenia', href: '/settings', icon: Cog6ToothIcon, roles: ['SUPERADMIN'] },
   ]
 
@@ -62,6 +111,15 @@ export default function TopNavigation({ session }: TopNavigationProps) {
   )
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/')
+
+  const isChildActive = (children?: NavChild[]) => {
+    if (!children) return false
+    return children.some(child => pathname === child.href || pathname.startsWith(child.href + '/'))
+  }
+
+  const toggleDropdown = (name: string) => {
+    setOpenDropdown(prev => prev === name ? null : name)
+  }
 
   const handleLogout = async () => {
     await signOut({ redirect: false })
@@ -192,14 +250,71 @@ export default function TopNavigation({ session }: TopNavigationProps) {
           </div>
 
           {/* Center: Main Navigation (hidden on mobile) */}
-          <nav className="hidden lg:flex items-center gap-1" data-testid="main-navigation">
+          <nav className="hidden lg:flex items-center gap-1" data-testid="main-navigation" ref={dropdownRef}>
             {filteredNavigation.map((item) => {
               const Icon = item.icon
-              const active = isActive(item.href)
+              const hasChildren = item.children && item.children.length > 0
+              const active = item.href ? isActive(item.href) : isChildActive(item.children)
+
+              if (hasChildren) {
+                return (
+                  <div key={item.name} className="relative">
+                    <button
+                      onClick={() => toggleDropdown(item.name)}
+                      className={`
+                        inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors
+                        ${active
+                          ? 'bg-gray-900 text-white'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                        }
+                      `}
+                      data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.name}
+                      <ChevronDownIcon className={`h-3 w-3 transition-transform ${openDropdown === item.name ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {openDropdown === item.name && (
+                      <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                        {item.children?.map((child) => {
+                          const ChildIcon = child.icon
+                          const childActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              prefetch={false}
+                              onClick={() => setOpenDropdown(null)}
+                              className={`
+                                flex items-center gap-3 px-4 py-2 text-sm transition-colors
+                                ${childActive
+                                  ? 'bg-gray-100 text-gray-900 font-medium'
+                                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                                }
+                              `}
+                              data-testid={`nav-${child.href.replace(/\//g, '-').slice(1)}`}
+                            >
+                              {ChildIcon && <ChildIcon className="h-4 w-4 text-gray-500" />}
+                              {child.name}
+                              {child.badge && (
+                                <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  {child.badge}
+                                </span>
+                              )}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
               return (
                 <Link
                   key={item.name}
-                  href={item.href}
+                  href={item.href!}
                   prefetch={false}
                   className={`
                     inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors
@@ -208,7 +323,7 @@ export default function TopNavigation({ session }: TopNavigationProps) {
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                     }
                   `}
-                  data-testid={`nav-${item.href.replace(/\//g, '-').slice(1)}`}
+                  data-testid={`nav-${item.href!.replace(/\//g, '-').slice(1)}`}
                 >
                   <Icon className="h-4 w-4" />
                   {item.name}
@@ -258,15 +373,57 @@ export default function TopNavigation({ session }: TopNavigationProps) {
             className="fixed inset-0 bg-black bg-opacity-25 z-40 lg:hidden"
             onClick={() => setMobileMenuOpen(false)}
           />
-          <div className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 shadow-lg z-50 lg:hidden">
+          <div className="absolute top-full left-0 right-0 bg-white border-b border-gray-200 shadow-lg z-50 lg:hidden max-h-[80vh] overflow-y-auto">
             <nav className="px-4 py-4 space-y-1" data-testid="mobile-navigation">
               {filteredNavigation.map((item) => {
                 const Icon = item.icon
-                const active = isActive(item.href)
+                const hasChildren = item.children && item.children.length > 0
+                const active = item.href ? isActive(item.href) : isChildActive(item.children)
+
+                if (hasChildren) {
+                  return (
+                    <div key={item.name}>
+                      <div
+                        className={`
+                          flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md
+                          ${active ? 'text-gray-900' : 'text-gray-600'}
+                        `}
+                      >
+                        <Icon className="h-5 w-5" />
+                        {item.name}
+                      </div>
+                      <div className="ml-8 mt-1 space-y-1">
+                        {item.children?.map((child) => {
+                          const ChildIcon = child.icon
+                          const childActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              prefetch={false}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={`
+                                flex items-center gap-3 px-3 py-2 text-sm rounded-md transition-colors
+                                ${childActive
+                                  ? 'bg-gray-100 text-gray-900 font-medium'
+                                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                }
+                              `}
+                            >
+                              {ChildIcon && <ChildIcon className="h-4 w-4" />}
+                              {child.name}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                }
+
                 return (
                   <Link
                     key={item.name}
-                    href={item.href}
+                    href={item.href!}
                     prefetch={false}
                     onClick={() => setMobileMenuOpen(false)}
                     className={`
@@ -284,7 +441,7 @@ export default function TopNavigation({ session }: TopNavigationProps) {
               })}
 
               {/* Divider */}
-              <div className="border-t border-gray-200 my-2" />
+              {filteredSystemMenu.length > 0 && <div className="border-t border-gray-200 my-2" />}
 
               {/* System menu on mobile */}
               {filteredSystemMenu.map((item) => {
@@ -292,7 +449,7 @@ export default function TopNavigation({ session }: TopNavigationProps) {
                 return (
                   <Link
                     key={item.name}
-                    href={item.href}
+                    href={item.href!}
                     prefetch={false}
                     onClick={() => setMobileMenuOpen(false)}
                     className="flex items-center gap-3 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"

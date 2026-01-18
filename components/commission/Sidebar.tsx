@@ -5,10 +5,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   HomeIcon,
-  ClipboardDocumentListIcon,
-  ListBulletIcon,
-  BeakerIcon,
-  ArrowDownTrayIcon,
+  PlayIcon,
+  CheckCircleIcon,
+  ArchiveBoxIcon,
   Bars3Icon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
@@ -22,11 +21,10 @@ type NavItem = {
 }
 
 const navigation: NavItem[] = [
-  { name: 'Dashboard', href: '/gestor/dashboard', icon: HomeIcon, testId: 'gestor-dashboard-nav' },
-  { name: 'Pridelené testy', href: '/gestor/assignments', icon: ClipboardDocumentListIcon, testId: 'gestor-assignments-nav' },
-  { name: 'Zoznam testov', href: '/gestor/tests', icon: ListBulletIcon, testId: 'gestor-tests-nav' },
-  { name: 'Precvičovanie', href: '/gestor/practice', icon: BeakerIcon, testId: 'gestor-practice-nav' },
-  { name: 'Import testov', href: '/gestor/import', icon: ArrowDownTrayIcon, testId: 'gestor-import-nav' },
+  { name: 'Dashboard', href: '/commission/dashboard', icon: HomeIcon, testId: 'commission-dashboard-nav' },
+  { name: 'Aktívne VK', href: '/commission/vk', icon: PlayIcon, testId: 'commission-active-vk-nav' },
+  { name: 'Ukončené VK', href: '/commission/vk/completed', icon: CheckCircleIcon, testId: 'commission-completed-vk-nav' },
+  { name: 'Archív', href: '/commission/archive', icon: ArchiveBoxIcon, testId: 'commission-archive-nav' },
 ]
 
 export default function Sidebar() {
@@ -34,8 +32,12 @@ export default function Sidebar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   function isActive(href: string) {
-    if (href === '/gestor/dashboard') {
-      return pathname === '/gestor/dashboard'
+    if (href === '/commission/dashboard') {
+      return pathname === '/commission/dashboard'
+    }
+    if (href === '/commission/vk') {
+      // Only match exactly /commission/vk, not /commission/vk/completed
+      return pathname === '/commission/vk' || (pathname.startsWith('/commission/vk/') && !pathname.includes('/completed'))
     }
     return pathname.startsWith(href)
   }
@@ -46,6 +48,7 @@ export default function Sidebar() {
       <button
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         className="fixed top-4 left-4 z-50 md:hidden bg-gray-800 text-white p-2 rounded-md"
+        data-testid="commission-mobile-menu-button"
       >
         {mobileMenuOpen ? (
           <XMarkIcon className="h-6 w-6" />
@@ -70,8 +73,14 @@ export default function Sidebar() {
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0
         `}
+        data-testid="commission-sidebar"
       >
-        <nav className="mt-16 md:mt-5 px-2">
+        {/* Logo/Brand */}
+        <div className="h-16 flex items-center px-4 border-b border-gray-700">
+          <span className="text-white font-semibold text-lg">Komisia</span>
+        </div>
+
+        <nav className="mt-5 px-2">
           {navigation.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
