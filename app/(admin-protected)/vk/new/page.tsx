@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeftIcon, ArrowRightIcon, DocumentIcon, CloudArrowUpIcon, PencilSquareIcon, CalendarIcon, ClockIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ArrowRightIcon, DocumentIcon, CloudArrowUpIcon, PencilSquareIcon, CalendarIcon, ClockIcon, PlusIcon, XMarkIcon, MagnifyingGlassIcon, ChevronDownIcon, ExclamationTriangleIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
 type User = {
@@ -17,6 +17,31 @@ type GestorOption = {
   value: string
   label: string
 }
+
+// Commission member types
+type CommissionRole = 'PREDSEDA' | 'CLEN' | 'NAHRADNIK' | null
+
+type CommissionMember = {
+  id: string
+  name: string
+  department: string
+  info: string
+  role: CommissionRole
+}
+
+// Available users for selection (dummy data)
+const AVAILABLE_USERS: Omit<CommissionMember, 'role'>[] = [
+  { id: '1', name: 'Jozef Kováč', department: 'Odbor personálnej politiky', info: '' },
+  { id: '2', name: 'Mária Horvátová', department: 'Oddelenie implementácie projektov', info: '' },
+  { id: '3', name: 'Peter Novotný', department: 'IT oddelenie – správa sietí a infraštruktúry', info: '' },
+  { id: '4', name: 'Lucia Benková', department: 'Oddelenie interného auditu a kontroly', info: '' },
+  { id: '5', name: 'Juraj Hronček', department: 'Odbor verejného obstarávania', info: '' },
+  { id: '6', name: 'Katarína Šimková', department: 'Odbor právnych služieb', info: '' },
+  { id: '7', name: 'Martin Polák', department: 'Oddelenie technickej podpory a správy IT', info: '' },
+  { id: '8', name: 'Anna Kučerová', department: 'Odbor strategického plánovania', info: '' },
+  { id: '9', name: 'Tomáš Zelený', department: 'Oddelenie medzinárodnej spolupráce', info: '' },
+  { id: '10', name: 'Eva Malá', department: 'Odbor komunikácie a marketingu', info: '' },
+]
 
 // Step definitions for the wizard
 // Labels in sidebar vs main content title
@@ -54,6 +79,13 @@ export default function NewVKPage() {
     additionalDates: [] as { date: string; time: string }[],
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Step 3: Commission members state
+  const [commissionMembers, setCommissionMembers] = useState<CommissionMember[]>([])
+  const [showMemberModal, setShowMemberModal] = useState(false)
+  const [memberSearchQuery, setMemberSearchQuery] = useState('')
+  const [memberModalPage, setMemberModalPage] = useState(1)
+  const [openRoleDropdown, setOpenRoleDropdown] = useState<string | null>(null)
 
   // Step errors for sidebar display
   const [stepErrors, setStepErrors] = useState<Record<string, string[]>>({})
@@ -245,6 +277,98 @@ export default function NewVKPage() {
     if (index < currentStep) return 'completed'
     if (index === currentStep) return 'current'
     return 'upcoming'
+  }
+
+  // Commission member functions
+  function addCommissionMember(user: Omit<CommissionMember, 'role'>) {
+    const newMember: CommissionMember = {
+      ...user,
+      role: null, // Default: no role selected
+    }
+    setCommissionMembers([...commissionMembers, newMember])
+  }
+
+  function removeCommissionMember(memberId: string) {
+    setCommissionMembers(commissionMembers.filter(m => m.id !== memberId))
+  }
+
+  function setMemberRole(memberId: string, role: CommissionRole) {
+    setCommissionMembers(prev => {
+      // If setting to PREDSEDA, remove PREDSEDA from others
+      let updated = prev.map(m => {
+        if (role === 'PREDSEDA' && m.id !== memberId && m.role === 'PREDSEDA') {
+          return { ...m, role: 'CLEN' as CommissionRole }
+        }
+        if (m.id === memberId) {
+          return { ...m, role }
+        }
+        return m
+      })
+
+      // Sort: PREDSEDA first, then CLEN, then NAHRADNIK at the end
+      return updated.sort((a, b) => {
+        const order = { PREDSEDA: 0, CLEN: 1, NAHRADNIK: 2, null: 1 }
+        const orderA = order[a.role ?? 'null'] ?? 1
+        const orderB = order[b.role ?? 'null'] ?? 1
+        return orderA - orderB
+      })
+    })
+    setOpenRoleDropdown(null)
+  }
+
+  // Filter available users (not already selected)
+  const availableUsersForModal = AVAILABLE_USERS.filter(
+    user => !commissionMembers.some(m => m.id === user.id)
+  )
+
+  // Normalize text for diacritics-insensitive search
+  function normalizeText(text: string): string {
+    return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  }
+
+  // Filter by search query (diacritics-insensitive)
+  const filteredModalUsers = availableUsersForModal.filter(user => {
+    if (memberSearchQuery === '') return true
+    const normalizedQuery = normalizeText(memberSearchQuery)
+    return (
+      normalizeText(user.name).includes(normalizedQuery) ||
+      normalizeText(user.department).includes(normalizedQuery)
+    )
+  })
+
+  // Pagination for modal
+  const ITEMS_PER_PAGE = 7
+  const totalModalPages = Math.ceil(filteredModalUsers.length / ITEMS_PER_PAGE)
+  const paginatedModalUsers = filteredModalUsers.slice(
+    (memberModalPage - 1) * ITEMS_PER_PAGE,
+    memberModalPage * ITEMS_PER_PAGE
+  )
+
+  // Get role badge style
+  function getRoleBadgeStyle(role: CommissionRole) {
+    switch (role) {
+      case 'PREDSEDA':
+        return 'bg-[#D1FAE5] text-[#065F46]' // Green
+      case 'CLEN':
+        return 'bg-[#F3F4F6] text-[#374151]' // Gray
+      case 'NAHRADNIK':
+        return 'bg-[#F3F4F6] text-[#374151]' // Gray
+      default:
+        return 'bg-ds-purple-10 text-ds-purple-80 border border-ds-purple-80' // Purple outline
+    }
+  }
+
+  function getRoleLabel(role: CommissionRole) {
+    switch (role) {
+      case 'PREDSEDA':
+        return 'Predseda'
+      case 'CLEN':
+        return 'Člen'
+      case 'NAHRADNIK':
+        return 'Náhradník'
+      default:
+        return 'Nastaviť rolu'
+    }
   }
 
   return (
@@ -778,8 +902,140 @@ export default function NewVKPage() {
               </div>
             )}
 
-            {/* Other steps placeholder */}
-            {currentStep > 1 && (
+            {/* Step 3: Zostavenie komisie */}
+            {currentStep === 2 && (
+              <div className="space-y-6">
+                {/* Header with Add button */}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMemberSearchQuery('')
+                      setMemberModalPage(1)
+                      setShowMemberModal(true)
+                    }}
+                    data-testid="add-member-button"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 border border-[#EAE9EA] text-[#3F3840] rounded-[10px] text-sm font-medium hover:bg-[#F9F9F9] transition-colors"
+                  >
+                    <PlusIcon className="h-5 w-5" />
+                    Pridať člena komisie
+                  </button>
+                </div>
+
+                {/* Commission members table or empty state */}
+                {commissionMembers.length === 0 ? (
+                  <div className="bg-[#FEF3C7] rounded-[15px] p-6 border border-[#F59E0B]" data-testid="empty-commission-warning">
+                    <div className="flex items-start gap-3">
+                      <ExclamationTriangleIcon className="h-6 w-6 text-[#D97706] flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h3 className="text-sm font-medium text-[#92400E]">Komisia nemá žiadnych členov</h3>
+                        <p className="mt-1 text-sm text-[#B45309]">
+                          Pridajte aspoň jedného člena do komisie pre pokračovanie vo vytváraní výberového konania.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMemberSearchQuery('')
+                            setMemberModalPage(1)
+                            setShowMemberModal(true)
+                          }}
+                          data-testid="empty-add-member-button"
+                          className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-[#D97706] text-white rounded-[10px] text-sm font-medium hover:bg-[#B45309] transition-colors"
+                        >
+                          <PlusIcon className="h-4 w-4" />
+                          Pridať člena komisie
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-[15px] border border-[#EAE9EA]" data-testid="commission-table">
+                    <table className="w-full">
+                      <tbody>
+                        {commissionMembers.map((member) => (
+                          <tr key={member.id} className="border-b border-[#EAE9EA] last:border-b-0" data-testid={`commission-member-${member.id}`}>
+                            <td className="px-6 py-4">
+                              <span className="text-sm font-medium text-[#3F3840]" data-testid={`member-name-${member.id}`}>
+                                {member.name}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <a
+                                href="#"
+                                className="text-sm text-ds-purple-80 underline hover:text-ds-purple-100"
+                                data-testid={`member-department-${member.id}`}
+                              >
+                                {member.department}
+                              </a>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="text-sm text-[#6A646B]" data-testid={`member-info-${member.id}`}>
+                                {member.info || 'info'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenRoleDropdown(openRoleDropdown === member.id ? null : member.id)}
+                                  data-testid={`member-role-button-${member.id}`}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${getRoleBadgeStyle(member.role)}`}
+                                >
+                                  {getRoleLabel(member.role)}
+                                  {!member.role && <ChevronDownIcon className="h-4 w-4" />}
+                                </button>
+                                {/* Role dropdown */}
+                                {openRoleDropdown === member.id && (
+                                  <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-[#EAE9EA] rounded-[10px] shadow-lg z-10" data-testid={`member-role-dropdown-${member.id}`}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setMemberRole(member.id, 'PREDSEDA')}
+                                      className="w-full px-4 py-2 text-left text-sm text-[#3F3840] hover:bg-[#F9F9F9] first:rounded-t-[10px]"
+                                      data-testid={`role-option-predseda-${member.id}`}
+                                    >
+                                      Predseda
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setMemberRole(member.id, 'CLEN')}
+                                      className="w-full px-4 py-2 text-left text-sm text-[#3F3840] hover:bg-[#F9F9F9]"
+                                      data-testid={`role-option-clen-${member.id}`}
+                                    >
+                                      Člen
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setMemberRole(member.id, 'NAHRADNIK')}
+                                      className="w-full px-4 py-2 text-left text-sm text-[#3F3840] hover:bg-[#F9F9F9] last:rounded-b-[10px]"
+                                      data-testid={`role-option-nahradnik-${member.id}`}
+                                    >
+                                      Náhradník
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <button
+                                type="button"
+                                onClick={() => removeCommissionMember(member.id)}
+                                data-testid={`remove-member-${member.id}`}
+                                className="text-[#9CA3AF] hover:text-[#6B7280] transition-colors"
+                              >
+                                <XMarkIcon className="h-5 w-5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Other steps placeholder (Step 4, 5, 6) */}
+            {currentStep > 2 && (
               <div className="bg-white rounded-[15px] p-12 border border-[#EAE9EA] text-center">
                 <p className="text-[#6A646B]">
                   Táto časť bude implementovaná v ďalších krokoch.
@@ -814,6 +1070,168 @@ export default function NewVKPage() {
           </form>
         </div>
       </div>
+
+      {/* Member Selection Modal */}
+      {showMemberModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowMemberModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-[15px] w-full max-w-3xl max-h-[80vh] overflow-hidden shadow-xl" data-testid="member-modal">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#EAE9EA]">
+              <h2 className="text-lg font-medium text-[#3F3840]">Vyberte člena do komisie</h2>
+              <button
+                type="button"
+                onClick={() => setShowMemberModal(false)}
+                className="text-[#6A646B] hover:text-[#3F3840] transition-colors"
+                data-testid="close-modal-button"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="px-6 py-4">
+              <div className="relative max-w-sm">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-[#9CA3AF]" />
+                <input
+                  type="text"
+                  placeholder="Vyhľadávať členov"
+                  value={memberSearchQuery}
+                  onChange={(e) => {
+                    setMemberSearchQuery(e.target.value)
+                    setMemberModalPage(1)
+                  }}
+                  className="w-full pl-10 pr-4 py-2.5 border border-[#EAE9EA] rounded-[10px] bg-white text-sm focus:outline-none focus:ring-1 focus:ring-ds-purple-80 focus:border-ds-purple-80"
+                  data-testid="member-search-input"
+                />
+              </div>
+            </div>
+
+            {/* User list */}
+            <div className="px-6 overflow-y-auto max-h-[400px]">
+              {paginatedModalUsers.length === 0 ? (
+                <div className="py-8 text-center text-[#6A646B]">
+                  {memberSearchQuery ? 'Žiadni členovia nevyhovujú vyhľadávaniu' : 'Všetci dostupní členovia boli pridaní'}
+                </div>
+              ) : (
+                <table className="w-full">
+                  <tbody>
+                    {paginatedModalUsers.map((user) => (
+                      <tr key={user.id} className="border-b border-[#EAE9EA] last:border-b-0" data-testid={`available-user-${user.id}`}>
+                        <td className="py-4">
+                          <span className="text-sm font-medium text-[#3F3840]">
+                            {user.name}
+                          </span>
+                        </td>
+                        <td className="py-4">
+                          <a
+                            href="#"
+                            className="text-sm text-ds-purple-80 underline hover:text-ds-purple-100"
+                          >
+                            {user.department}
+                          </a>
+                        </td>
+                        <td className="py-4">
+                          <span className="text-sm text-[#6A646B]">
+                            {user.info || 'info'}
+                          </span>
+                        </td>
+                        <td className="py-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              addCommissionMember(user)
+                            }}
+                            data-testid={`add-user-${user.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#EAE9EA] text-[#3F3840] rounded-[10px] text-sm font-medium hover:bg-[#F9F9F9] transition-colors"
+                          >
+                            <PlusIcon className="h-4 w-4" />
+                            Pridať člena
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {totalModalPages > 1 && (
+              <div className="px-6 py-4 border-t border-[#EAE9EA] flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMemberModalPage(Math.max(1, memberModalPage - 1))}
+                  disabled={memberModalPage === 1}
+                  className="p-2 rounded-[10px] hover:bg-[#F9F9F9] disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-testid="modal-prev-page"
+                >
+                  <ChevronLeftIcon className="h-4 w-4 text-[#6A646B]" />
+                </button>
+
+                {/* Page numbers */}
+                {Array.from({ length: Math.min(5, totalModalPages) }, (_, i) => {
+                  let pageNum: number
+                  if (totalModalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (memberModalPage <= 3) {
+                    pageNum = i + 1
+                  } else if (memberModalPage >= totalModalPages - 2) {
+                    pageNum = totalModalPages - 4 + i
+                  } else {
+                    pageNum = memberModalPage - 2 + i
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setMemberModalPage(pageNum)}
+                      className={`w-8 h-8 rounded-[10px] text-sm font-medium ${
+                        pageNum === memberModalPage
+                          ? 'bg-ds-purple-80 text-white'
+                          : 'text-[#6A646B] hover:bg-[#F9F9F9]'
+                      }`}
+                      data-testid={`modal-page-${pageNum}`}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+
+                {totalModalPages > 5 && memberModalPage < totalModalPages - 2 && (
+                  <>
+                    <span className="text-[#6A646B]">...</span>
+                    <button
+                      type="button"
+                      onClick={() => setMemberModalPage(totalModalPages)}
+                      className="w-8 h-8 rounded-[10px] text-sm font-medium text-[#6A646B] hover:bg-[#F9F9F9]"
+                      data-testid={`modal-page-${totalModalPages}`}
+                    >
+                      {totalModalPages}
+                    </button>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setMemberModalPage(Math.min(totalModalPages, memberModalPage + 1))}
+                  disabled={memberModalPage === totalModalPages}
+                  className="p-2 rounded-[10px] hover:bg-[#F9F9F9] disabled:opacity-50 disabled:cursor-not-allowed"
+                  data-testid="modal-next-page"
+                >
+                  <ChevronRightIcon className="h-4 w-4 text-[#6A646B]" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
