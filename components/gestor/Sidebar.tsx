@@ -4,14 +4,27 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  DocumentTextIcon,
+  HomeIcon,
+  ClipboardDocumentListIcon,
   Bars3Icon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 
+const navigation = [
+  { name: 'Dashboard', href: '/gestor/dashboard', icon: HomeIcon, testId: 'gestor-dashboard-nav' },
+  { name: 'Moje úlohy', href: '/gestor/assignments', icon: ClipboardDocumentListIcon, testId: 'gestor-assignments-nav' },
+]
+
 export default function Sidebar() {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  function isActive(href: string) {
+    if (href === '/gestor/dashboard') {
+      return pathname === '/gestor/dashboard'
+    }
+    return pathname.startsWith(href)
+  }
 
   return (
     <>
@@ -45,23 +58,30 @@ export default function Sidebar() {
         `}
       >
         <nav className="mt-16 md:mt-5 px-2">
-          <Link
-            href="/gestor/dashboard"
-            prefetch={false}
-            onClick={() => setMobileMenuOpen(false)}
-            data-testid="gestor-dashboard-nav"
-            className={`
-              group flex items-center px-2 py-2 text-sm font-medium rounded-md mb-1
-              ${
-                pathname.startsWith('/gestor/')
-                  ? 'bg-gray-900 text-white'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-              }
-            `}
-          >
-            <DocumentTextIcon className="mr-3 h-5 w-5" />
-            Testy
-          </Link>
+          {navigation.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item.href)
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                prefetch={false}
+                onClick={() => setMobileMenuOpen(false)}
+                data-testid={item.testId}
+                className={`
+                  group flex items-center px-2 py-2 text-sm font-medium rounded-md mb-1
+                  ${
+                    active
+                      ? 'bg-gray-900 text-white'
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }
+                `}
+              >
+                <Icon className="mr-3 h-5 w-5" />
+                {item.name}
+              </Link>
+            )
+          })}
         </nav>
       </aside>
     </>

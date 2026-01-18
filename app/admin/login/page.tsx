@@ -24,12 +24,27 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const { data: session, status } = useSession()
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated - based on role
   useEffect(() => {
-    if (status === 'authenticated' && session) {
-      router.push(callbackUrl)
+    if (status === 'authenticated' && session?.user) {
+      // Determine redirect URL based on role
+      let targetUrl = callbackUrl
+
+      // If no explicit callback or callback is to admin routes, redirect based on role
+      if (!searchParams.get('callbackUrl') || callbackUrl === '/dashboard') {
+        const userRole = session.user.role
+        if (userRole === 'GESTOR') {
+          targetUrl = '/gestor/dashboard'
+        } else if (userRole === 'KOMISIA') {
+          targetUrl = '/komisia/dashboard'
+        } else {
+          targetUrl = '/dashboard' // Admin, Superadmin go to admin dashboard
+        }
+      }
+
+      router.push(targetUrl)
     }
-  }, [status, session, router, callbackUrl])
+  }, [status, session, router, callbackUrl, searchParams])
 
   useEffect(() => {
     const url = searchParams.get('callbackUrl')
@@ -54,7 +69,7 @@ export default function AdminLoginPage() {
     setError(null)
 
     try {
-      const result = await signIn('credentials', {
+      const result = await signIn('admin-credentials', {
         redirect: false,
         login: data.login,
         password: data.password,
@@ -66,8 +81,8 @@ export default function AdminLoginPage() {
         return
       }
 
-      // Successful login - redirect to callback URL or dashboard
-      router.push(callbackUrl)
+      // Successful login - let useEffect handle redirect based on role
+      // We refresh to update the session, then useEffect will redirect
       router.refresh()
     } catch (err) {
       console.error('Login error:', err)

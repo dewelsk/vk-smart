@@ -1,7 +1,9 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { ClipboardDocumentListIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
-
-type AssignmentStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'APPROVED'
+import { auth } from '@/auth'
+import { prisma } from '@/lib/prisma'
+import { AssignmentStatus } from '@prisma/client'
 
 type Assignment = {
   id: string
@@ -18,27 +20,54 @@ type Assignment = {
     minQuestions: number | null
     maxQuestions: number | null
   }
-  createdAt: string
-  startedAt: string | null
+  createdAt: Date
+  startedAt: Date | null
 }
 
-async function getDashboardData() {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5600'}/api/gestor/assignments`,
-    {
-      cache: 'no-store',
-    }
-  )
+async function getDashboardData(userId: string) {
+  // Get assignments directly from database
+  const assignments = await prisma.testAssignment.findMany({
+    where: {
+      assignedToUserId: userId,
+    },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      testType: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      testTypeCondition: {
+        select: {
+          id: true,
+          name: true,
+          minQuestions: true,
+          maxQuestions: true,
+        },
+      },
+    },
+  })
 
-  if (!res.ok) {
-    throw new Error('Failed to fetch dashboard data')
+  // Calculate stats
+  const stats = {
+    pending: 0,
+    inProgress: 0,
+    completed: 0,
+    approved: 0,
   }
 
-  return res.json()
+  assignments.forEach((assignment) => {
+    if (assignment.status === 'PENDING') stats.pending++
+    if (assignment.status === 'IN_PROGRESS') stats.inProgress++
+    if (assignment.status === 'COMPLETED') stats.completed++
+    if (assignment.status === 'APPROVED') stats.approved++
+  })
+
+  return { assignments, stats }
 }
 
-function formatDate(dateString: string) {
-  const date = new Date(dateString)
+function formatDate(date: Date) {
   return new Intl.DateTimeFormat('sk-SK', {
     day: '2-digit',
     month: '2-digit',
@@ -79,8 +108,13 @@ function getStatusLabel(status: AssignmentStatus) {
 }
 
 export default async function GestorDashboardPage() {
-  const data = await getDashboardData()
-  const { stats, assignments } = data
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    redirect('/admin/login')
+  }
+
+  const { stats, assignments } = await getDashboardData(session.user.id)
 
   // Filter for TODO list (PENDING and IN_PROGRESS only)
   const todoAssignments = assignments.filter(

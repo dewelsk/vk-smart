@@ -1,6 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { config } from 'dotenv'
+
+// Load environment variables BEFORE tests run (needed for Prisma)
+// Next.js uses .env.local for local development
+config({ path: '.env.local' })
 
 export default defineConfig({
   plugins: [react()],

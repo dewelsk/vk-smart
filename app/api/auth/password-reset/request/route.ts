@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateResetToken } from '@/lib/auth/password-reset'
+import { generatePasswordResetToken } from '@/lib/auth/password-reset'
 import { prisma } from '@/lib/prisma'
+import { sendEmail } from '@/lib/email/mailgun'
+import { passwordResetEmail } from '@/lib/email/templates'
 
 /**
  * POST /api/auth/password-reset/request
@@ -41,19 +43,25 @@ export async function POST(request: NextRequest) {
         }
 
         // Generate reset token
-        const token = await generateResetToken(user.id)
+        const { token } = await generatePasswordResetToken(user.id)
 
-        // TODO: Send email with reset link
-        // const resetLink = `${process.env.NEXTAUTH_URL}/auth/password-reset/${token}`
-        // await sendEmail({
-        //   to: user.email!,
-        //   template: 'password-reset',
-        //   data: {
-        //     name: `${user.name} ${user.surname}`,
-        //     resetLink,
-        //     expiryHours: 1,
-        //   },
-        // })
+        // Send email with reset link
+        const emailContent = passwordResetEmail({
+            firstName: user.name || '',
+            lastName: user.surname || '',
+            token,
+        })
+
+        const emailResult = await sendEmail({
+            to: user.email!,
+            subject: emailContent.subject,
+            html: emailContent.html,
+        })
+
+        if (!emailResult.success) {
+            console.error('[PASSWORD_RESET] Email send failed:', emailResult.error)
+            // Continue anyway - user might try again
+        }
 
         // TODO: Audit log
         // await logAudit({

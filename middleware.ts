@@ -64,21 +64,30 @@ export default auth(async (req) => {
 
   // Handling for Admin/Gestor/Komisia users
   if (token?.type === 'user') {
-    // Only enforce security redirects in production
-    const isProductionEnv = process.env.NODE_ENV === 'production'
+    // Force security redirects (enabled in development and production)
+    // 1. Force password change if required
+    const mustChangePassword = token.mustChangePassword === true
+    if (mustChangePassword && pathname !== '/auth/change-password' && !pathname.startsWith('/api/auth')) {
+      return NextResponse.redirect(new URL('/auth/change-password', req.url))
+    }
 
-    if (isProductionEnv) {
-      // 1. Force password change if required
-      const mustChangePassword = token.mustChangePassword === true
-      if (mustChangePassword && pathname !== '/auth/change-password' && !pathname.startsWith('/api/auth')) {
-        return NextResponse.redirect(new URL('/auth/change-password', req.url))
-      }
+    // 2. Force 2FA setup or verification if required
+    const twoFactorRequired = token.twoFactorRequired === true
+    const twoFactorEnabled = token.twoFactorEnabled === true
+    const twoFactorVerified = token.twoFactorVerified === true
 
-      // 2. Force 2FA verification if required but not yet done
-      const twoFactorRequired = token.twoFactorRequired === true
-      const twoFactorVerified = token.twoFactorVerified === true
+    // 2FA paths that should be allowed during 2FA flow
+    const twoFactorPaths = ['/auth/verify-2fa', '/auth/setup-2fa']
+    const isOnTwoFactorPath = twoFactorPaths.some(p => pathname === p || pathname.startsWith(p))
 
-      if (twoFactorRequired && !twoFactorVerified && pathname !== '/auth/verify-2fa' && !pathname.startsWith('/api/auth')) {
+    if (twoFactorRequired && !twoFactorVerified && !isOnTwoFactorPath && !pathname.startsWith('/api/auth')) {
+      if (!twoFactorEnabled) {
+        // User needs to set up 2FA first
+        const setupUrl = new URL('/auth/setup-2fa', req.url)
+        setupUrl.searchParams.set('callbackUrl', pathname)
+        return NextResponse.redirect(setupUrl)
+      } else {
+        // User has 2FA enabled, needs to verify
         const verifyUrl = new URL('/auth/verify-2fa', req.url)
         verifyUrl.searchParams.set('callbackUrl', pathname)
         return NextResponse.redirect(verifyUrl)

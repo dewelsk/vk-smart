@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/auth'
+import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { UserRole, AssignmentStatus } from '@prisma/client'
 
@@ -10,7 +9,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await auth()
 
     if (!session?.user || session.user.role !== UserRole.GESTOR) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -19,8 +18,8 @@ export async function POST(
     const body = await request.json()
     const { name, description, questions } = body
 
-    // Validate required fields
-    if (!name || !questions || !Array.isArray(questions)) {
+    // Validate required fields - questions is required, name is optional (will use assignment name)
+    if (!questions || !Array.isArray(questions)) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -70,6 +69,9 @@ export async function POST(
       }
     }
 
+    // Use provided name or fall back to assignment name
+    const testName = name || assignment.name
+
     // Create or update test
     let test
     if (assignment.test) {
@@ -77,7 +79,7 @@ export async function POST(
       test = await prisma.test.update({
         where: { id: assignment.test.id },
         data: {
-          name,
+          name: testName,
           description: description || null,
           questions,
         },
@@ -86,7 +88,7 @@ export async function POST(
       // Create new test
       test = await prisma.test.create({
         data: {
-          name,
+          name: testName,
           description: description || null,
           testTypeId: assignment.testTypeId,
           testTypeConditionId: assignment.testTypeConditionId,

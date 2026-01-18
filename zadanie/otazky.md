@@ -6,6 +6,8 @@ Ak nemozeme pouzit externu sluzbu, budeme potrebovat SMTP server cez ktory budu
 Nasadzovanie
 Projekt je teraz v Githube
 
+Staticke data
+Kde budu ulozene staticke data?
 
 Procesne otazky
 

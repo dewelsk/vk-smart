@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/auth'
+import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { UserRole, AssignmentStatus } from '@prisma/client'
 
-// POST /api/gestor/assignments/[id]/complete - Complete test and submit for approval
+// POST /api/gestor/assignments/[id]/complete - Submit test for approval (COMPLETED)
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await auth()
 
     if (!session?.user || session.user.role !== UserRole.GESTOR) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -19,8 +18,8 @@ export async function POST(
     const body = await request.json()
     const { name, description, questions } = body
 
-    // Validate required fields
-    if (!name || !questions || !Array.isArray(questions)) {
+    // Validate required fields - questions is required
+    if (!questions || !Array.isArray(questions)) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -54,18 +53,20 @@ export async function POST(
       )
     }
 
-    const condition = assignment.testTypeCondition
+    // Validate question count against testTypeCondition requirements
+    const minQuestions = assignment.testTypeCondition?.minQuestions ?? 0
+    const maxQuestions = assignment.testTypeCondition?.maxQuestions ?? Infinity
 
-    // Validate question count
-    if (
-      condition.minQuestions &&
-      condition.maxQuestions &&
-      (questions.length < condition.minQuestions || questions.length > condition.maxQuestions)
-    ) {
+    if (questions.length < minQuestions) {
       return NextResponse.json(
-        {
-          error: `Počet otázok musí byť v rozsahu ${condition.minQuestions}-${condition.maxQuestions}`,
-        },
+        { error: `Test musí obsahovať minimálne ${minQuestions} otázok` },
+        { status: 400 }
+      )
+    }
+
+    if (questions.length > maxQuestions) {
+      return NextResponse.json(
+        { error: `Test môže obsahovať maximálne ${maxQuestions} otázok` },
         { status: 400 }
       )
     }
@@ -84,25 +85,33 @@ export async function POST(
           { status: 400 }
         )
       }
-      // Validate all options are filled
-      for (const option of q.options) {
-        if (!option || option.trim().length === 0) {
-          return NextResponse.json(
-            { error: 'Všetky odpovede musia byť vyplnené' },
-            { status: 400 }
-          )
-        }
+      // Check that all options have content
+      if (q.options.some((opt: string) => !opt || !opt.trim())) {
+        return NextResponse.json(
+          { error: 'Všetky možnosti odpovede musia byť vyplnené' },
+          { status: 400 }
+        )
+      }
+      // Check that question text has content
+      if (!q.question.trim()) {
+        return NextResponse.json(
+          { error: 'Text otázky nesmie byť prázdny' },
+          { status: 400 }
+        )
       }
     }
+
+    // Use provided name or fall back to assignment name
+    const testName = name || assignment.name
 
     // Create or update test
     let test
     if (assignment.test) {
-      // Update existing draft
+      // Update existing test
       test = await prisma.test.update({
         where: { id: assignment.test.id },
         data: {
-          name,
+          name: testName,
           description: description || null,
           questions,
         },
@@ -111,7 +120,7 @@ export async function POST(
       // Create new test
       test = await prisma.test.create({
         data: {
-          name,
+          name: testName,
           description: description || null,
           testTypeId: assignment.testTypeId,
           testTypeConditionId: assignment.testTypeConditionId,
@@ -134,7 +143,7 @@ export async function POST(
     })
 
     return NextResponse.json({
-      message: 'Test úspešne odoslaný na schválenie',
+      message: 'Test odoslaný na schválenie',
       test: {
         id: test.id,
         name: test.name,
@@ -143,7 +152,6 @@ export async function POST(
       assignment: {
         id: updatedAssignment.id,
         status: updatedAssignment.status,
-        completedAt: updatedAssignment.completedAt,
       },
     })
   } catch (error) {

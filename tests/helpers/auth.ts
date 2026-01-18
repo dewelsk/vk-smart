@@ -21,7 +21,7 @@ export async function loginAsGestor(page: Page) {
   await page.fill('input#login', 'gestor.mv@retry.sk')
   await page.fill('input#password', 'Test1234')
   await page.click('button[type="submit"]')
-  await page.waitForURL('/dashboard', { timeout: 10000 })
+  await page.waitForURL('/gestor/dashboard', { timeout: 10000 })
 }
 
 export async function logout(page: Page) {

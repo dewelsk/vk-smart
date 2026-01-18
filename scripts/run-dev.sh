@@ -112,7 +112,7 @@ echo ""
 # Spustenie dev servera
 echo -e "${BLUE}[3/3] Spúšťam dev server...${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}   Aplikácia bude dostupná na: http://localhost:5600${NC}"
+echo -e "${GREEN}   Aplikácia bude dostupná na: http://localhost:5700${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${YELLOW}Pre ukončenie stlačte Ctrl+C${NC}"

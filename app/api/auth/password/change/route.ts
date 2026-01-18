@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { changePassword } from '@/lib/auth/password-reset'
 import { prisma } from '@/lib/prisma'
+import { sendEmail } from '@/lib/email/mailgun'
+import { passwordChangedEmail } from '@/lib/email/templates'
 
 /**
  * POST /api/auth/password/change
@@ -61,26 +63,36 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        // Change password
-        const result = await changePassword(userId, newPassword)
+        // Change password (function throws on error, no return value)
+        await changePassword(userId, currentPassword, newPassword)
 
-        if (!result.success) {
-            return NextResponse.json(
-                { error: result.error || 'Failed to change password' },
-                { status: 400 }
-            )
+        // Send confirmation email
+        if (user.email) {
+            const ipAddress = request.headers.get('x-forwarded-for') ||
+                              request.headers.get('x-real-ip') ||
+                              'neznáma'
+            const timestamp = new Date().toLocaleString('sk-SK', {
+                dateStyle: 'long',
+                timeStyle: 'short',
+            })
+
+            const emailContent = passwordChangedEmail({
+                firstName: user.name || '',
+                lastName: user.surname || '',
+                timestamp,
+                ipAddress,
+            })
+
+            const emailResult = await sendEmail({
+                to: user.email,
+                subject: emailContent.subject,
+                html: emailContent.html,
+            })
+
+            if (!emailResult.success) {
+                console.error('[PASSWORD_CHANGE] Email send failed:', emailResult.error)
+            }
         }
-
-        // TODO: Send confirmation email
-        // if (user.email) {
-        //   await sendEmail({
-        //     to: user.email,
-        //     template: 'password-changed',
-        //     data: {
-        //       name: `${user.name} ${user.surname}`,
-        //     },
-        //   })
-        // }
 
         // TODO: Audit log
         // await logAudit({

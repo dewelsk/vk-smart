@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { toast } from 'react-hot-toast'
 import { QRCodeDisplay } from '@/components/QRCodeDisplay'
@@ -10,7 +10,8 @@ import { BackupCodesDisplay } from '@/components/BackupCodesDisplay'
 
 export default function Setup2FAPage() {
     const router = useRouter()
-    const { data: session } = useSession()
+    const searchParams = useSearchParams()
+    const { data: session, update: updateSession } = useSession()
     const [step, setStep] = useState<'setup' | 'verify' | 'backup'>('setup')
     const [loading, setLoading] = useState(false)
     const [qrCode, setQrCode] = useState<string>('')
@@ -64,6 +65,12 @@ export default function Setup2FAPage() {
                 throw new Error(data.error || 'Invalid verification code')
             }
 
+            // Update session to reflect 2FA is now enabled and verified
+            await updateSession({
+                twoFactorEnabled: true,
+                twoFactorVerified: true,
+            })
+
             toast.success('2FA bola úspešne aktivovaná!')
             setStep('backup')
         } catch (error: any) {
@@ -76,7 +83,8 @@ export default function Setup2FAPage() {
 
     // Step 3: Finish setup
     const handleFinish = () => {
-        router.push('/settings/security')
+        const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+        router.push(callbackUrl)
     }
 
     const downloadBackupCodes = () => {
@@ -111,33 +119,10 @@ export default function Setup2FAPage() {
             <div className="max-w-2xl w-full">
                 <div className="bg-white rounded-lg shadow-lg p-8">
                     {/* Header */}
-                    <div className="text-center mb-8">
-                        <h1 className="text-3xl font-bold text-gray-900 mb-2" data-testid="page-title">
+                    <div className="text-center mb-6">
+                        <h1 className="text-2xl font-bold text-gray-900" data-testid="page-title">
                             Nastavenie dvojfaktorovej autentifikácie
                         </h1>
-                        <p className="text-gray-600">
-                            Zabezpečte svoj účet pomocou 2FA
-                        </p>
-                    </div>
-
-                    {/* Progress indicator */}
-                    <div className="flex items-center justify-center mb-8">
-                        <div className="flex items-center gap-2">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'setup' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white'
-                                }`}>
-                                1
-                            </div>
-                            <div className="w-16 h-1 bg-gray-300" />
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'verify' ? 'bg-blue-600 text-white' : step === 'backup' ? 'bg-green-600 text-white' : 'bg-gray-300 text-gray-600'
-                                }`}>
-                                2
-                            </div>
-                            <div className="w-16 h-1 bg-gray-300" />
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${step === 'backup' ? 'bg-blue-600 text-white' : 'bg-gray-300 text-gray-600'
-                                }`}>
-                                3
-                            </div>
-                        </div>
                     </div>
 
                     {/* Step 1: Setup */}

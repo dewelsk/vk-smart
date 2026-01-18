@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-<parameter name="auth } from '@/auth'
+import { auth } from '@/auth'
 import { verifyToken, hashBackupCodes } from '@/lib/auth/totp'
 import { prisma } from '@/lib/prisma'
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
         if (!secret || !token || !backupCodes || !Array.isArray(backupCodes)) {
             return NextResponse.json(
-                { error: 'Missing required fields' },
+                { error: 'Chýbajúce povinné údaje' },
                 { status: 400 }
             )
         }
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
         if (!isValid) {
             return NextResponse.json(
-                { error: 'Invalid verification code' },
+                { error: 'Nesprávny overovací kód' },
                 { status: 400 }
             )
         }
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error('2FA verification error:', error)
         return NextResponse.json(
-            { error: 'Failed to enable 2FA' },
+            { error: 'Nepodarilo sa aktivovať 2FA' },
             { status: 500 }
         )
     }

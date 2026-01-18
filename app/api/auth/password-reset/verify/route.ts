@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyResetToken, changePassword } from '@/lib/auth/password-reset'
+import { verifyResetToken, setNewPassword } from '@/lib/auth/password-reset'
 import { prisma } from '@/lib/prisma'
+import { sendEmail } from '@/lib/email/mailgun'
+import { passwordChangedEmail } from '@/lib/email/templates'
 
 /**
  * POST /api/auth/password-reset/verify
- * Verify reset token and change password
+ * Verify reset token (or password set token) and change password
  * Body: { token, newPassword }
  */
 export async function POST(request: NextRequest) {
@@ -19,22 +21,24 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        // Verify token
-        const userId = await verifyResetToken(token)
+        // Verify token (supports both reset and set tokens)
+        const tokenResult = await verifyResetToken(token)
 
-        if (!userId) {
+        if (!tokenResult) {
             return NextResponse.json(
-                { error: 'Invalid or expired reset token' },
+                { error: 'Invalid or expired token' },
                 { status: 400 }
             )
         }
 
-        // Change password
-        const result = await changePassword(userId, newPassword)
+        const { userId, tokenType } = tokenResult
 
-        if (!result.success) {
+        // Set new password
+        try {
+            await setNewPassword(userId, newPassword, tokenType)
+        } catch (error: any) {
             return NextResponse.json(
-                { error: result.error || 'Failed to change password' },
+                { error: error.message || 'Failed to set password' },
                 { status: 400 }
             )
         }
@@ -49,16 +53,33 @@ export async function POST(request: NextRequest) {
             },
         })
 
-        // TODO: Send confirmation email
-        // if (user?.email) {
-        //   await sendEmail({
-        //     to: user.email,
-        //     template: 'password-changed',
-        //     data: {
-        //       name: `${user.name} ${user.surname}`,
-        //     },
-        //   })
-        // }
+        // Send confirmation email
+        if (user?.email) {
+            const ipAddress = request.headers.get('x-forwarded-for') ||
+                              request.headers.get('x-real-ip') ||
+                              'neznáma'
+            const timestamp = new Date().toLocaleString('sk-SK', {
+                dateStyle: 'long',
+                timeStyle: 'short',
+            })
+
+            const emailContent = passwordChangedEmail({
+                firstName: user.name || '',
+                lastName: user.surname || '',
+                timestamp,
+                ipAddress,
+            })
+
+            const emailResult = await sendEmail({
+                to: user.email,
+                subject: emailContent.subject,
+                html: emailContent.html,
+            })
+
+            if (!emailResult.success) {
+                console.error('[PASSWORD_RESET_VERIFY] Email send failed:', emailResult.error)
+            }
+        }
 
         // TODO: Audit log
         // await logAudit({

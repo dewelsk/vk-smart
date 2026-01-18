@@ -1,3 +1,4 @@
+console.log('>>> LOADING ROOT AUTH.TS')
 import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
@@ -22,164 +23,160 @@ const candidateLoginSchema = z.object({
   pin: z.string().min(1, 'PIN is required'),
 })
 
-export const authConfig: NextAuthConfig = {
-  providers: [
-    // Admin/Gestor/Komisia Login
-    Credentials({
-      id: 'credentials',
-      name: 'credentials',
-      credentials: {
-        login: { label: 'Email/Username', type: 'text' },
-        password: { label: 'Password', type: 'password' },
-      },
-      async authorize(credentials) {
-        try {
-          // Validate credentials
-          const { login, password } = loginSchema.parse(credentials)
+// Define providers separately to set unique IDs
+// Define providers as raw objects to avoid Credentials() helper wrapping/id issues
+const adminProvider: any = {
+  id: 'admin-credentials',
+  type: 'credentials',
+  name: 'Admin Login',
+  credentials: {
+    login: { label: 'Email/Username', type: 'text' },
+    password: { label: 'Password', type: 'password' },
+  },
+  async authorize(credentials: any) {
+    console.log('[AUTH] Admin Authorize called with:', { login: credentials?.login })
+    try {
+      // Validate credentials
+      const { login, password } = loginSchema.parse(credentials)
+      console.log('[AUTH] Credentials parsed for:', login)
 
-          // Find user by email or username
-          const user = await prisma.user.findFirst({
-            where: {
-              OR: [
-                { email: login },
-                { username: login },
-              ],
-              deleted: false,
-              active: true,
-            },
+      // Find user by email or username
+      console.log('[AUTH] Finding user in DB...')
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: login },
+            { username: login },
+          ],
+          deleted: false,
+          active: true,
+        },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          name: true,
+          surname: true,
+          role: true,
+          password: true,
+          otpEnabled: true,
+          otpSecret: true,
+          twoFactorRequired: true,
+          mustChangePassword: true,
+          userRoles: {
             select: {
-              id: true,
-              email: true,
-              username: true,
-              name: true,
-              surname: true,
               role: true,
-              password: true,
-              otpEnabled: true,
-              otpSecret: true,
-              twoFactorRequired: true,
-              mustChangePassword: true,
-              userRoles: {
-                select: {
-                  role: true,
-                },
-              },
             },
-          })
+          },
+        },
+      })
 
-          if (!user || !user.password) {
-            return null
-          }
+      if (!user) {
+        console.log('[AUTH] User NOT found')
+        return null
+      }
 
-          // Check if account is locked
-          const lockStatus = await getAccountLockoutInfo(user.id)
-          if (lockStatus.isLocked) {
-            throw new Error(`Account is locked: ${lockStatus.lockReason}`)
-          }
+      if (!user.password) {
+        console.log('[AUTH] User has NO password')
+        return null
+      }
 
-          // Verify password
-          const isPasswordValid = await bcrypt.compare(password, user.password)
-          if (!isPasswordValid) {
-            // Record failed login attempt
-            await recordFailedAttempt(user.id)
-            return null
-          }
+      // Check if account is locked
+      console.log('[AUTH] Checking lockout...')
+      const lockStatus = await getAccountLockoutInfo(user.id)
+      if (lockStatus.isLocked) {
+        console.log('[AUTH] Account LOCKED:', lockStatus.lockReason)
+        throw new Error(`Account is locked: ${lockStatus.lockReason}`)
+      }
 
-          // Reset failed attempts on successful login
-          await resetFailedAttempts(user.id)
+      // Verify password
+      console.log('[AUTH] Verifying password...')
+      const isPasswordValid = await bcrypt.compare(password, user.password)
+      if (!isPasswordValid) {
+        console.log('[AUTH] Password INVALID')
+        // Record failed login attempt
+        await recordFailedAttempt(user.id)
+        return null
+      }
 
-          // Update last login
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { lastLoginAt: new Date() },
-          })
+      // Reset failed attempts on successful login
+      await resetFailedAttempts(user.id)
 
-          // Return user data for session with 2FA and password change flags
-          return {
-            id: user.id,
-            email: user.email,
-            username: user.username,
-            name: user.name,
-            surname: user.surname,
-            role: user.role,
-            roles: user.userRoles.map((ur) => ({
-              role: ur.role,
-            })),
-            type: 'user',
-            // 2FA and security flags
-            twoFactorRequired: user.twoFactorRequired || false,
-            twoFactorEnabled: user.otpEnabled || false,
-            mustChangePassword: user.mustChangePassword || false,
-          }
-        } catch (error) {
-          console.error('Authorization error:', error)
-          return null
-        }
-      },
-    }),
-    // Candidate Login
-    Credentials({
-      id: 'candidate-credentials',
-      name: 'Candidate Login',
-      credentials: {
-        cisIdentifier: { label: 'CIS ID', type: 'text' },
-        pin: { label: 'PIN', type: 'password' },
-      },
-      async authorize(credentials) {
-        try {
-          // Validate credentials
-          const { cisIdentifier, pin } = candidateLoginSchema.parse(credentials)
+      // Update last login
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      })
 
-          // Find candidate by CIS
-          const candidate = await prisma.candidate.findUnique({
-            where: {
-              cisIdentifier,
-              active: true,
-              deleted: false,
-            },
-            include: {
-              vk: {
-                select: {
-                  id: true,
-                  identifier: true,
-                },
-              },
-            },
-          })
+      console.log('[AUTH] Success for:', user.email)
+      // Return user data for session with 2FA and password change flags
+      return {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        name: user.name,
+        surname: user.surname,
+        role: user.role,
+        roles: user.userRoles.map((ur) => ({
+          role: ur.role,
+        })),
+        type: 'user',
+        // 2FA and security flags
+        twoFactorRequired: user.twoFactorRequired || false,
+        twoFactorEnabled: user.otpEnabled || false,
+        mustChangePassword: user.mustChangePassword || false,
+      }
+    } catch (error) {
+      console.error('[AUTH] Authorization error:', error)
+      return null
+    }
+  },
+}
 
-          if (!candidate || !candidate.password) {
-            return null
-          }
+const candidateProvider: any = {
+  id: 'candidate-credentials',
+  type: 'credentials',
+  name: 'Candidate Login',
+  credentials: {
+    cisIdentifier: { label: 'CIS ID', type: 'text' },
+    pin: { label: 'PIN', type: 'password' },
+  },
+  async authorize(credentials: any) {
+    try {
+      // Validate credentials
+      const { cisIdentifier, pin } = candidateLoginSchema.parse(credentials)
 
-          // Verify PIN
-          const isValid = await bcrypt.compare(pin, candidate.password)
-          if (!isValid) {
-            return null
-          }
+      // Find candidate by CIS
+      const candidate = await prisma.candidate.findUnique({
+        where: {
+          cisIdentifier,
+          active: true,
+          deleted: false,
+        },
+      })
 
-          // Update last login
-          await prisma.candidate.update({
-            where: { id: candidate.id },
-            data: { lastLoginAt: new Date() },
-          })
+      if (!candidate || candidate.pin !== pin) {
+        return null
+      }
 
-          // Return candidate data for session
-          return {
-            id: candidate.id,
-            candidateId: candidate.id,
-            cisIdentifier: candidate.cisIdentifier,
-            name: candidate.name,
-            surname: candidate.surname,
-            vkId: candidate.vkId,
-            type: 'candidate',
-          }
-        } catch (error) {
-          console.error('Candidate authorization error:', error)
-          return null
-        }
-      },
-    }),
-  ],
+      // Return candidate data for session
+      return {
+        id: candidate.id,
+        candidateId: candidate.id,
+        vkId: candidate.vkId,
+        type: 'candidate',
+        name: candidate.name,
+        surname: candidate.surname,
+      }
+    } catch (error) {
+      console.error('Candidate authorization error:', error)
+      return null
+    }
+  },
+}
+
+export const authConfig: NextAuthConfig = {
+  providers: [adminProvider, candidateProvider],
   session: {
     strategy: 'jwt',
     maxAge: 24 * 60 * 60, // 24 hours
@@ -189,6 +186,19 @@ export const authConfig: NextAuthConfig = {
     error: '/admin/login',
   },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // If url is relative, make it absolute
+      if (url.startsWith('/')) {
+        url = `${baseUrl}${url}`
+      }
+
+      // Allow redirects to the same host
+      if (new URL(url).origin === baseUrl) {
+        return url
+      }
+
+      return baseUrl
+    },
     async jwt({ token, user, trigger, session }) {
       // Initial sign in
       if (user) {
@@ -217,9 +227,17 @@ export const authConfig: NextAuthConfig = {
         }
       }
 
-      // Handle session updates (e.g. after 2FA verification)
-      if (trigger === 'update' && session?.twoFactorVerified !== undefined) {
-        token.twoFactorVerified = session.twoFactorVerified
+      // Handle session updates (e.g. after 2FA verification, disable, or password change)
+      if (trigger === 'update' && session) {
+        if (session.twoFactorVerified !== undefined) {
+          token.twoFactorVerified = session.twoFactorVerified
+        }
+        if (session.twoFactorEnabled !== undefined) {
+          token.twoFactorEnabled = session.twoFactorEnabled
+        }
+        if (session.mustChangePassword !== undefined) {
+          token.mustChangePassword = session.mustChangePassword
+        }
       }
 
       return token

@@ -48,11 +48,61 @@ export async function verifyPasswordResetToken(
 }
 
 /**
+ * Verify a password set token (for new users)
+ * @param token - Set token
+ * @returns User ID if valid, null otherwise
+ */
+export async function verifyPasswordSetToken(
+    token: string
+): Promise<string | null> {
+    const user = await prisma.user.findFirst({
+        where: {
+            passwordSetToken: token,
+            passwordSetTokenExpiry: {
+                gt: new Date(), // Token not expired
+            },
+            deleted: false,
+        },
+        select: { id: true },
+    })
+
+    return user?.id || null
+}
+
+/**
+ * Verify either a password reset token or password set token
+ * @param token - Token to verify
+ * @returns Object with userId and tokenType if valid
+ */
+export async function verifyResetToken(
+    token: string
+): Promise<{ userId: string; tokenType: 'reset' | 'set' } | null> {
+    // First try password reset token
+    const resetUserId = await verifyPasswordResetToken(token)
+    if (resetUserId) {
+        return { userId: resetUserId, tokenType: 'reset' }
+    }
+
+    // Then try password set token
+    const setUserId = await verifyPasswordSetToken(token)
+    if (setUserId) {
+        return { userId: setUserId, tokenType: 'set' }
+    }
+
+    return null
+}
+
+/**
  * Set a new password for a user
  * @param userId - User ID
  * @param newPassword - New password (plain text)
+ * @param tokenType - Type of token used ('reset' or 'set')
  */
-export async function setNewPassword(userId: string, newPassword: string) {
+export async function setNewPassword(
+    userId: string,
+    newPassword: string,
+    tokenType: 'reset' | 'set' = 'reset'
+) {
     // Validate password strength
     const validation = validatePasswordStrength(newPassword)
     if (!validation.isValid) {
@@ -62,16 +112,25 @@ export async function setNewPassword(userId: string, newPassword: string) {
     // Hash password
     const hashedPassword = await bcrypt.hash(newPassword, 10)
 
-    // Update password and clear reset token
+    // Build update data - clear the appropriate token
+    const updateData: any = {
+        password: hashedPassword,
+        passwordChangedAt: new Date(),
+        mustChangePassword: false,
+    }
+
+    if (tokenType === 'reset') {
+        updateData.passwordResetToken = null
+        updateData.passwordResetExpiry = null
+    } else {
+        updateData.passwordSetToken = null
+        updateData.passwordSetTokenExpiry = null
+    }
+
+    // Update password and clear token
     await prisma.user.update({
         where: { id: userId },
-        data: {
-            password: hashedPassword,
-            passwordResetToken: null,
-            passwordResetExpiry: null,
-            passwordChangedAt: new Date(),
-            mustChangePassword: false,
-        },
+        data: updateData,
     })
 }
 

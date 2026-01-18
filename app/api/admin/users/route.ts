@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { UserRole  } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { sendEmail } from '@/lib/email/mailgun'
+import { welcomeEmail } from '@/lib/email/templates'
 
 
 // GET /api/admin/users - List users with filters
@@ -190,6 +192,12 @@ export async function POST(request: NextRequest) {
       Math.random().toString(36).substring(2, 15)
     const passwordSetTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
 
+    // Determine security flags based on role
+    // Admin roles require 2FA
+    const requiresTwoFactor = ['ADMIN', 'SUPERADMIN'].includes(role)
+    // Gestor must change password on first login (after setting initial password)
+    const mustChangePassword = role === 'GESTOR'
+
     // Create user
     const user = await prisma.user.create({
       data: {
@@ -202,11 +210,41 @@ export async function POST(request: NextRequest) {
         passwordSetToken,
         passwordSetTokenExpiry,
         active: true,
+        // Security flags based on role
+        twoFactorRequired: requiresTwoFactor,
+        mustChangePassword: mustChangePassword,
       },
     })
 
-    // TODO: Send email with password set link
-    // For now, just return the token in response (MVP)
+    // Send welcome email with password set link
+    let emailSent = false
+    if (email) {
+      const roleLabels: Record<string, string> = {
+        SUPERADMIN: 'Super Administrátor',
+        ADMIN: 'Administrátor',
+        GESTOR: 'Gestor',
+        KOMISIA: 'Člen komisie',
+      }
+
+      const emailContent = welcomeEmail({
+        firstName: name,
+        lastName: surname,
+        email,
+        role: roleLabels[role] || role,
+        token: passwordSetToken,
+      })
+
+      const emailResult = await sendEmail({
+        to: email,
+        subject: emailContent.subject,
+        html: emailContent.html,
+      })
+
+      emailSent = emailResult.success
+      if (!emailResult.success) {
+        console.error('[USER_CREATE] Welcome email failed:', emailResult.error)
+      }
+    }
 
     return NextResponse.json({
       user: {
@@ -217,7 +255,8 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
       },
-      passwordSetLink: `/set-password?token=${passwordSetToken}`,
+      passwordSetLink: `/auth/password-reset/${passwordSetToken}`,
+      emailSent,
     })
   } catch (error) {
     console.error('POST /api/admin/users error:', error)

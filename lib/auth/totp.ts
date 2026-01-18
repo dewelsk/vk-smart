@@ -1,13 +1,17 @@
-import { authenticator } from 'otplib'
-import QRCode from 'qrcode'
-import crypto from 'crypto'
-import bcrypt from 'bcryptjs'
+import {
+    generateSecret as otplibGenerateSecret,
+    generateURI,
+    verifySync,
+} from 'otplib'
+import * as QRCode from 'qrcode'
+import * as crypto from 'crypto'
+import * as bcrypt from 'bcryptjs'
 
 /**
  * Generate a new TOTP secret for a user
  */
 export function generateSecret(): string {
-    return authenticator.generateSecret()
+    return otplibGenerateSecret()
 }
 
 /**
@@ -21,7 +25,14 @@ export async function generateQRCode(
     email: string,
     issuer: string = 'VK Smart'
 ): Promise<string> {
-    const otpauth = authenticator.keyuri(email, issuer, secret)
+    const otpauth = generateURI({
+        secret,
+        label: email,
+        issuer,
+        algorithm: 'sha1',
+        digits: 6,
+        period: 30,
+    })
     const qrCodeDataURL = await QRCode.toDataURL(otpauth)
     return qrCodeDataURL
 }
@@ -38,11 +49,13 @@ export function verifyToken(
     window: number = 1
 ): boolean {
     try {
-        return authenticator.verify({
+        // epochTolerance is in seconds, window * 30 converts steps to seconds
+        const result = verifySync({
             token,
             secret,
-            window,
+            epochTolerance: window * 30,
         })
+        return result.valid
     } catch (error) {
         console.error('TOTP verification error:', error)
         return false

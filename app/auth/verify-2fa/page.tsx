@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { signIn } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { toast } from 'react-hot-toast'
 import { TOTPInput } from '@/components/TOTPInput'
 
@@ -10,6 +10,7 @@ export default function Verify2FAPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+    const { update: updateSession } = useSession()
 
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string>('')
@@ -37,8 +38,7 @@ export default function Verify2FAPage() {
             const data = await response.json()
 
             // 1. Update session to mark 2FA as verified
-            const { update } = await import('next-auth/react')
-            await update({ twoFactorVerified: true })
+            await updateSession({ twoFactorVerified: true })
 
             // 2. Show warning if backup code was used
             if (data.usedBackupCode) {
@@ -49,9 +49,8 @@ export default function Verify2FAPage() {
                 toast.success('Prihlásenie úspešné!')
             }
 
-            // 3. Redirect to callback URL
-            router.push(callbackUrl)
-            router.refresh()
+            // 3. Redirect to callback URL (use window.location for hard navigation)
+            window.location.href = callbackUrl
         } catch (error: any) {
             console.error('2FA verification error:', error)
             setError(error.message || 'Nesprávny overovací kód')

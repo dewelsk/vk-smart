@@ -11,7 +11,7 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: 'http://localhost:5600',
+    baseURL: 'http://localhost:5700',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -26,9 +26,9 @@ export default defineConfig({
   webServer: useExistingServer
     ? undefined
     : {
-        command: 'npm run dev:e2e',
-        url: 'http://localhost:5600',
-        reuseExistingServer: true, // Always reuse existing server in local development
-        timeout: 120 * 1000,
-      },
+      command: 'npm run dev:e2e',
+      url: 'http://localhost:5700',
+      reuseExistingServer: true, // Always reuse existing server in local development
+      timeout: 120 * 1000,
+    },
 })

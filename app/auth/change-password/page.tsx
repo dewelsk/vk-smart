@@ -66,17 +66,11 @@ export default function ChangePasswordPage() {
 
             toast.success('Heslo bolo úspešne zmenené')
 
-            // Update session locally to clear mustChangePassword flag
-            await update({
-                ...session,
-                user: {
-                    ...session?.user,
-                    mustChangePassword: false
-                }
-            })
+            // Update session to clear mustChangePassword flag
+            await update({ mustChangePassword: false })
 
-            router.push('/dashboard')
-            router.refresh()
+            // Use hard navigation to ensure middleware re-evaluates
+            window.location.href = '/dashboard'
         } catch (error: any) {
             console.error('Change password error:', error)
             toast.error(error.message || 'Nastala chyba pri zmene hesla')
